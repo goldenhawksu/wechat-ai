@@ -1,0 +1,55 @@
+{
+  "name": "wxai",
+  "version": "0.1.0",
+  "description": "WeChat AI Bot — Bridge WeChat to Claude, Qwen, DeepSeek and more",
+  "type": "module",
+  "bin": {
+    "wxai": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "start": "node dist/cli.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src/",
+    "clean": "rm -rf dist"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "license": "MIT",
+  "keywords": [
+    "wechat",
+    "weixin",
+    "claude",
+    "openai",
+    "gemini",
+    "ai",
+    "bot",
+    "gateway",
+    "agent",
+    "deepseek",
+    "qwen"
+  ],
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.81",
+    "qrcode-terminal": "^0.12.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.4.0",
+    "typescript": "^5.7.0"
+  }
+}
