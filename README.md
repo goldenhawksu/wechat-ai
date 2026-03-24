@@ -6,39 +6,38 @@
   <img src="docs/screenshot.png" width="800" alt="wechat-ai screenshot" />
 </p>
 
+## 快速开始
+
+### 1. 安装
+
 ```bash
 npm i -g wechat-ai
-wechat-ai set qwen sk-xxx
-wechat-ai
 ```
 
-## 支持模型
-
-| 模型 | 默认版本 | 设置 Key | 获取 Key |
-|------|---------|---------|---------|
-| 通义千问 (Qwen) | qwen-plus | `wechat-ai set qwen <key>` | [申请](https://dashscope.console.aliyun.com/apiKey) |
-| DeepSeek | deepseek-chat | `wechat-ai set deepseek <key>` | [申请](https://platform.deepseek.com/api_keys) |
-| Claude | claude-opus-4-6 (Agent) | `wechat-ai set claude <key>` | [申请](https://console.anthropic.com/settings/keys) |
-| GPT | gpt-4o | `wechat-ai set gpt <key>` | [申请](https://platform.openai.com/api-keys) |
-| Gemini | gemini-2.0-flash | `wechat-ai set gemini <key>` | [申请](https://aistudio.google.com/apikey) |
-| MiniMax | MiniMax-Text-01 | `wechat-ai set minimax <key>` | [申请](https://platform.minimaxi.com/user-center/basic-information/interface-key) |
-| 智谱 (GLM) | glm-4-plus | `wechat-ai set glm <key>` | [申请](https://open.bigmodel.cn/usercenter/apikeys) |
-
-支持任何 OpenAI 兼容 API，编辑 `~/.wai/config.json` 即可添加。
-
-Claude 通过 [Agent SDK](https://github.com/anthropics/claude-agent-sdk-typescript) 接入，支持执行代码、读写文件、搜索网页，不只是聊天。
-
-## 安装运行
+### 2. 设置 API Key（任选一个模型）
 
 ```bash
-# 方式一：直接运行（无需安装）
+wechat-ai set qwen sk-xxx        # 通义千问
+wechat-ai set deepseek sk-xxx    # DeepSeek
+wechat-ai set gemini AIza-xxx    # Gemini
+```
+
+### 3. 启动
+
+```bash
+wechat-ai                        # 首次启动会弹出微信扫码
+```
+
+扫码登录后，给微信机器人发消息即可开始对话。
+
+## 其他安装方式
+
+```bash
+# 免安装体验
 npx wechat-ai
 
-# 方式二：全局安装
-npm i -g wechat-ai
-
-# 方式三：克隆源码
-git clone https://github.com/anxiong2025/wechat-ai.git
+# 从源码运行
+git clone https://github.com/anthropics/wechat-ai.git
 cd wechat-ai && npm install && npm run build && node dist/cli.js
 ```
 
@@ -49,8 +48,27 @@ wechat-ai                        # 启动（首次自动弹出二维码）
 wechat-ai set <模型> <key>        # 保存 API Key
 wechat-ai use <模型>              # 设置默认模型
 wechat-ai config                 # 查看配置（Key 已脱敏）
+wechat-ai start                  # 后台运行（daemon 模式）
+wechat-ai stop                   # 停止后台进程
+wechat-ai logs                   # 查看后台日志
 wechat-ai update                 # 更新到最新版
 ```
+
+## 支持模型
+
+| 模型 | 默认版本 | 设置 Key | 获取 Key |
+|------|---------|---------|---------|
+| 通义千问 (Qwen) | qwen-plus | `wechat-ai set qwen <key>` | [申请](https://bailian.console.aliyun.com/cn-beijing/?tab=model#/api-key) |
+| DeepSeek | deepseek-chat | `wechat-ai set deepseek <key>` | [申请](https://platform.deepseek.com/api_keys) |
+| Claude | claude-opus-4-6 (Agent) | `wechat-ai set claude <key>` | [申请](https://console.anthropic.com/settings/keys) |
+| GPT | gpt-4o | `wechat-ai set gpt <key>` | [申请](https://platform.openai.com/api-keys) |
+| Gemini | gemini-2.0-flash | `wechat-ai set gemini <key>` | [申请](https://aistudio.google.com/apikey) |
+| MiniMax | MiniMax-Text-01 | `wechat-ai set minimax <key>` | [申请](https://platform.minimaxi.com/user-center/basic-information/interface-key) |
+| 智谱 (GLM) | glm-4-plus | `wechat-ai set glm <key>` | [申请](https://open.bigmodel.cn/usercenter/apikeys) |
+
+支持任何 OpenAI 兼容 API，编辑 `~/.wai/config.json` 即可添加。
+
+Claude 通过 [Agent SDK](https://github.com/anthropics/claude-agent-sdk-typescript) 接入，支持执行代码、读写文件、搜索网页，不只是聊天。
 
 ### 微信内指令
 
@@ -88,17 +106,6 @@ src/
     └── openai-compatible.ts  通用 OpenAI 兼容
 ```
 
-## 微信协议
-
-直接实现微信 ilink bot API，不依赖 OpenClaw：
-
-- 登录：`ilink/bot/get_bot_qrcode` 扫码
-- 收消息：`ilink/bot/getupdates` 长轮询
-- 发消息：`ilink/bot/sendmessage`
-- 输入状态：`ilink/bot/sendtyping`
-
-参考：[@tencent-weixin/openclaw-weixin](https://www.npmjs.com/package/@tencent-weixin/openclaw-weixin) (MIT)
-
 ## 计划
 
 - [x] 微信 ilink 协议
@@ -106,9 +113,13 @@ src/
 - [x] 输入状态提示
 - [x] 7 个内置模型
 - [x] npm 发布
+- [x] 中间件系统
+- [x] MCP 客户端支持
+- [x] 所有模型 Function Calling
+- [x] 后台运行 (daemon 模式)
 - [ ] 图片/文件收发
+- [ ] 语音消息 (ASR/TTS)
 - [ ] Telegram / Discord 渠道
-- [ ] MCP 支持
 
 ## 协议
 

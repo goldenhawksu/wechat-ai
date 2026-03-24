@@ -91,7 +91,9 @@ function printBanner(defaultProvider: string): void {
   ];
 
   const welcome = `${c.bold}${c.white}Welcome!${c.reset}`;
-  const info = `${c.dim}model: ${defaultProvider} · type /help in chat${c.reset}`;
+  const info = defaultProvider
+    ? `${c.dim}model: ${defaultProvider} · type /help in chat${c.reset}`
+    : `${c.dim}type /help in chat${c.reset}`;
 
   console.log();
   console.log(topBorder);
@@ -277,7 +279,24 @@ async function main() {
     }
 
     default: {
-      printBanner(config.defaultProvider);
+      // Check which providers have API keys configured
+      const configured: string[] = [];
+      for (const [name, prov] of Object.entries(config.providers)) {
+        const envKey = (prov as Record<string, unknown>).apiKeyEnv as string | undefined;
+        if (prov.apiKey || (envKey && process.env[envKey])) {
+          configured.push(name);
+        }
+      }
+
+      printBanner(configured.length > 0 ? config.defaultProvider : "");
+
+      if (configured.length === 0) {
+        console.log(`\x1b[2m  尚未配置 API Key，请运行 wechat-ai set <模型> <key>\x1b[0m`);
+        console.log();
+      } else {
+        console.log(`\x1b[32m✓\x1b[0m 可用模型: ${configured.join(", ")}`);
+        console.log();
+      }
 
       const gateway = new Gateway(config);
       gateway.init();

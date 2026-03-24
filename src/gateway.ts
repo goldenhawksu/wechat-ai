@@ -80,7 +80,7 @@ export class Gateway {
       }
     }
 
-    log.info(`已初始化 ${this.channels.size} 个渠道, ${this.providers.size} 个模型`);
+    log.debug(`已初始化 ${this.channels.size} 个渠道, ${this.providers.size} 个模型`);
   }
 
   async login(channelName: string): Promise<void> {
@@ -108,7 +108,7 @@ export class Gateway {
     this.startWebhook();
 
     const startPromises = [...this.channels.entries()].map(([name, channel]) => {
-      log.info(`启动渠道: ${name}`);
+      log.debug(`启动渠道: ${name}`);
       return channel.start((msg) => this.handleMessage(msg)).catch((err) => {
         log.error(`渠道 ${name} 异常: ${err instanceof Error ? err.message : err}`);
       });
@@ -287,7 +287,16 @@ export class Gateway {
           return;
         }
 
-        log.info(`调用 ${c.provider} 处理中...`);
+        // Check if the provider has an API key configured
+        const provConfig = this.config.providers[c.provider];
+        const envKey = (provConfig as Record<string, unknown>)?.apiKeyEnv as string | undefined;
+        const hasKey = provConfig?.apiKey || (envKey && process.env[envKey]);
+        if (!hasKey) {
+          c.response = `当前模型 ${c.provider} 未配置 API Key，请在终端执行:\nwechat-ai set ${c.provider} <your-key>`;
+          return;
+        }
+
+        log.info(`${c.provider} 处理中...`);
 
         if ("sendTyping" in c.channel) {
           (c.channel as any).sendTyping(c.message.senderId, c.message.replyToken);

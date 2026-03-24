@@ -98,7 +98,7 @@ export class WeixinChannel implements Channel {
 
   async login(): Promise<void> {
     const baseUrl = (this.config.baseUrl as string) || DEFAULT_BASE_URL;
-    log.info("获取二维码中...");
+    log.debug("获取二维码中...");
 
     const qrRes = await this.api(baseUrl, "ilink/bot/get_bot_qrcode?bot_type=3", null, {
       method: "GET",
@@ -183,14 +183,14 @@ export class WeixinChannel implements Channel {
       await this.loadAccount();
     }
     if (!this.account) {
-      log.info("未找到账号，开始登录...");
+      log.info("首次使用，开始登录...");
       await this.login();
     }
 
     await this.loadSyncBuf();
     await this.loadLastTokens();
     this.running = true;
-    log.info(`消息监听已启动 (${this.account!.accountId.slice(0, 8)}...)`);
+    log.info(`已上线 (${this.account!.accountId.slice(0, 8)}...)`);
 
     // Send startup greeting to all known users
     await this.sendStartupGreeting();
@@ -250,7 +250,7 @@ export class WeixinChannel implements Channel {
                   aeskey = `base64:${item.video_item.media.aes_key}`;
                 }
 
-                log.info(`下载媒体 type=${m.type}, aeskey=${aeskey ? "有" : "无"}`);
+                log.debug(`下载媒体 type=${m.type}, aeskey=${aeskey ? "有" : "无"}`);
                 const dataUrl = await this.downloadMedia("", aeskey, encryptParam);
                 if (dataUrl) {
                   m.url = dataUrl;
@@ -367,12 +367,10 @@ export class WeixinChannel implements Channel {
         { timeout: API_TIMEOUT_MS },
       );
 
-      log.info(`sendmessage 请求: to=${msg.targetId}, context_token=${(msg.replyToken || "无").slice(0, 20)}...`);
-      log.info(`sendmessage 响应: ${JSON.stringify(res).slice(0, 300)}`);
       if (res.ret && res.ret !== 0) {
         log.error(`发送失败: ret=${res.ret} ${res.errmsg || JSON.stringify(res)}`);
       } else {
-        log.info(`文本已发送 (${chunk.length} 字符)`);
+        log.debug(`文本已发送 (${chunk.length} 字符)`);
       }
     }
   }
@@ -417,7 +415,7 @@ export class WeixinChannel implements Channel {
         return false;
       }
 
-      log.info("语音消息已发送");
+      log.debug("语音消息已发送");
       return true;
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
@@ -471,7 +469,7 @@ export class WeixinChannel implements Channel {
         return null;
       }
 
-      log.info(`媒体上传成功: ${media.encrypt_query_param.slice(0, 20)}...`);
+      log.debug(`媒体上传成功: ${media.encrypt_query_param.slice(0, 20)}...`);
       return media;
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
@@ -507,7 +505,7 @@ export class WeixinChannel implements Channel {
     try {
       // Build CDN download URL
       const cdnUrl = `${CDN_BASE_URL}/download?encrypted_query_param=${encodeURIComponent(encryptParam)}`;
-      log.info(`下载媒体: ${cdnUrl.slice(0, 80)}...`);
+      log.debug(`下载媒体: ${cdnUrl.slice(0, 80)}...`);
 
       const res = await fetch(cdnUrl, { signal: AbortSignal.timeout(30_000) });
       if (!res.ok) {
@@ -516,7 +514,7 @@ export class WeixinChannel implements Channel {
       }
 
       let buffer = Buffer.from(await res.arrayBuffer());
-      log.info(`CDN 下载完成: ${buffer.length} bytes`);
+      log.debug(`CDN 下载完成: ${buffer.length} bytes`);
 
       // Decrypt with AES-128-ECB if aeskey is provided
       if (aeskey) {
@@ -539,7 +537,7 @@ export class WeixinChannel implements Channel {
           }
           const decipher = createDecipheriv("aes-128-ecb", key, null);
           buffer = Buffer.concat([decipher.update(buffer), decipher.final()]);
-          log.info(`AES 解密完成: ${buffer.length} bytes`);
+          log.debug(`AES 解密完成: ${buffer.length} bytes`);
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : String(err);
           log.warn(`AES 解密失败 (尝试使用原始数据): ${errMsg}`);
@@ -583,7 +581,7 @@ export class WeixinChannel implements Channel {
           // WeChat may provide voice-to-text directly
           if (voice?.text) {
             texts.push(voice.text);
-            log.info(`语音自带转文字: "${voice.text.slice(0, 50)}"`);
+            log.debug(`语音自带转文字: "${voice.text.slice(0, 50)}"`);
           } else if (voice?.media?.encrypt_query_param) {
             media.push({ type: "voice", url: voice.media.encrypt_query_param });
           }
@@ -694,7 +692,7 @@ export class WeixinChannel implements Channel {
     try {
       const raw = await readFile(path, "utf-8");
       this.account = JSON.parse(raw);
-      log.info(`已加载账号: ${this.account!.accountId.slice(0, 8)}...`);
+      log.debug(`已加载账号: ${this.account!.accountId.slice(0, 8)}...`);
     } catch {
       log.warn("加载账号失败");
     }
@@ -723,12 +721,12 @@ export class WeixinChannel implements Channel {
     if (this.lastTokens.size === 0) return;
 
     const greeting = "Hey! I'm back online and ready to chat. Send me a message anytime! 👋";
-    log.info(`发送启动问候给 ${this.lastTokens.size} 个用户...`);
+    log.debug(`发送启动问候给 ${this.lastTokens.size} 个用户...`);
 
     for (const [userId, token] of this.lastTokens) {
       try {
         await this.send({ targetId: userId, text: greeting, replyToken: token });
-        log.info(`已问候 ${userId.slice(0, 8)}...`);
+        log.debug(`已问候 ${userId.slice(0, 8)}...`);
       } catch {
         log.warn(`问候失败 ${userId.slice(0, 8)}... (token 可能过期)`);
       }
@@ -760,7 +758,7 @@ export class WeixinChannel implements Channel {
       for (const [k, v] of Object.entries(data)) {
         if (typeof v === "string") this.lastTokens.set(k, v);
       }
-      log.info(`已加载 ${this.lastTokens.size} 个用户 token`);
+      log.debug(`已加载 ${this.lastTokens.size} 个用户 token`);
     } catch {
       // fresh start
     }
