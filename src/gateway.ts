@@ -287,11 +287,13 @@ export class Gateway {
           return;
         }
 
-        // Check if the provider has an API key configured
+        // Check if the provider has usable auth
         const provConfig = this.config.providers[c.provider];
         const envKey = (provConfig as Record<string, unknown>)?.apiKeyEnv as string | undefined;
-        const hasKey = provConfig?.apiKey || (envKey && process.env[envKey]);
-        if (!hasKey) {
+        const hasAuth = provConfig?.apiKey
+          || (envKey && process.env[envKey])
+          || provConfig?.type === "claude-agent"; // claude-agent has its own auth (SDK / ~/.claude)
+        if (!hasAuth) {
           c.response = `当前模型 ${c.provider} 未配置 API Key，请在终端执行:\nwechat-ai set ${c.provider} <your-key>`;
           return;
         }

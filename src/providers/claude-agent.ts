@@ -21,6 +21,12 @@ export class ClaudeAgentProvider implements Provider {
   ): Promise<string> {
     const { query } = await import("@anthropic-ai/claude-agent-sdk");
 
+    // Use project-configured API key if available, otherwise SDK falls back to ~/.claude
+    const apiKey = this.config.apiKey || process.env.ANTHROPIC_API_KEY;
+    if (apiKey) {
+      process.env.ANTHROPIC_API_KEY = apiKey;
+    }
+
     const allowedTools = options?.allowedTools
       || (this.config.allowedTools as string[])
       || DEFAULT_TOOLS;

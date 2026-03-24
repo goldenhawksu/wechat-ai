@@ -3,6 +3,8 @@
 import { readFileSync, existsSync, unlinkSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { homedir } from "node:os";
+import type { ProviderConfig } from "./types.js";
 import { loadConfig, saveConfig, getDataDir } from "./config.js";
 import { Gateway } from "./gateway.js";
 import { setLogLevel, createLogger } from "./logger.js";
@@ -107,6 +109,20 @@ function printBanner(defaultProvider: string): void {
   console.log(center(info));
   console.log(`  ${b}╰${"─".repeat(inner)}╯${c.reset}`);
   console.log();
+}
+
+/** Check if a provider has any usable auth: config key, env var, or provider-specific auth */
+function isProviderReady(prov: ProviderConfig): boolean {
+  // Config API key
+  if (prov.apiKey) return true;
+  // Environment variable
+  const envKey = (prov as Record<string, unknown>).apiKeyEnv as string | undefined;
+  if (envKey && process.env[envKey]) return true;
+  // Provider-specific: claude-agent uses ~/.claude auth
+  if (prov.type === "claude-agent") {
+    return existsSync(join(homedir(), ".claude")) || !!process.env.ANTHROPIC_API_KEY;
+  }
+  return false;
 }
 
 async function main() {
@@ -282,8 +298,7 @@ async function main() {
       // Check which providers have API keys configured
       const configured: string[] = [];
       for (const [name, prov] of Object.entries(config.providers)) {
-        const envKey = (prov as Record<string, unknown>).apiKeyEnv as string | undefined;
-        if (prov.apiKey || (envKey && process.env[envKey])) {
+        if (isProviderReady(prov)) {
           configured.push(name);
         }
       }
