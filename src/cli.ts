@@ -23,6 +23,7 @@ const HELP = `
     wechat-ai start                  后台运行 (daemon 模式)
     wechat-ai stop                   停止后台进程
     wechat-ai logs                   查看后台日志
+    wechat-ai logout                 退出登录 (清除微信账号)
     wechat-ai set <provider> <key>   设置模型 API Key
     wechat-ai use <provider>         设置默认模型
     wechat-ai config                 查看当前配置
@@ -123,6 +124,42 @@ function isProviderReady(prov: ProviderConfig): boolean {
     return existsSync(join(homedir(), ".claude")) || !!process.env.ANTHROPIC_API_KEY;
   }
   return false;
+}
+
+async function autoUpdate(currentVersion: string): Promise<void> {
+  // Skip in daemon mode
+  if (process.env.WAI_DAEMON) return;
+
+  try {
+    const { execSync } = await import("node:child_process");
+    const latest = execSync("npm view wechat-ai version 2>/dev/null", {
+      encoding: "utf-8",
+      timeout: 5000,
+    }).trim();
+
+    if (!latest || latest === currentVersion) return;
+
+    // Compare semver: only update if latest is newer
+    const parse = (v: string) => v.replace(/^v/, "").split(".").map(Number) as [number, number, number];
+    const [cMaj, cMin, cPat] = parse(currentVersion);
+    const [lMaj, lMin, lPat] = parse(latest);
+    const isNewer = lMaj > cMaj
+      || (lMaj === cMaj && lMin > cMin)
+      || (lMaj === cMaj && lMin === cMin && lPat > cPat);
+    if (!isNewer) return;
+
+    console.log(`\x1b[36m⟳\x1b[0m 发现新版本 v${currentVersion} → v${latest}，正在更新...`);
+    execSync("npm i -g wechat-ai@latest", { stdio: "inherit", timeout: 60000 });
+    console.log(`\x1b[32m✓\x1b[0m 更新完成，正在重启...\n`);
+
+    // Re-exec with the new version
+    execSync(`"${process.execPath}" "${process.argv[1]}" ${process.argv.slice(2).join(" ")}`, {
+      stdio: "inherit",
+    });
+    process.exit(0);
+  } catch {
+    // Update check failed silently — don't block startup
+  }
 }
 
 async function main() {
@@ -281,6 +318,26 @@ async function main() {
       break;
     }
 
+    case "logout": {
+      const { getAccountsDir } = await import("./config.js");
+      const accountsDir = getAccountsDir();
+      const files = ["weixin.json", "weixin-sync.json", "weixin-tokens.json"];
+      let cleared = false;
+      for (const f of files) {
+        const p = join(accountsDir, f);
+        if (existsSync(p)) {
+          unlinkSync(p);
+          cleared = true;
+        }
+      }
+      if (cleared) {
+        console.log(`\x1b[32m✓\x1b[0m 已退出登录，下次启动将重新扫码`);
+      } else {
+        console.log("当前没有已登录的账号");
+      }
+      break;
+    }
+
     case "config": {
       // Hide API keys in output
       const display = JSON.parse(JSON.stringify(config));
@@ -295,6 +352,9 @@ async function main() {
     }
 
     default: {
+      // Auto-update check
+      await autoUpdate(VERSION);
+
       // Check which providers have API keys configured
       const configured: string[] = [];
       for (const [name, prov] of Object.entries(config.providers)) {

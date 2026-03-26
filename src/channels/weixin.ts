@@ -1,7 +1,7 @@
 import { createLogger } from "../logger.js";
 import { getAccountsDir, ensureDir } from "../config.js";
 import { join } from "node:path";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile, unlink } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { randomBytes, randomUUID, createDecipheriv } from "node:crypto";
 import type { Channel, InboundMessage, OutboundMessage, ChannelConfig, MediaAttachment } from "../types.js";
@@ -182,6 +182,17 @@ export class WeixinChannel implements Channel {
     if (!this.account) {
       await this.loadAccount();
     }
+
+    // If we have a saved account and running interactively, ask whether to reuse it
+    if (this.account && !process.env.WAI_DAEMON) {
+      const reuse = await this.promptReuse();
+      if (!reuse) {
+        log.info("清除旧账号，重新扫码登录...");
+        await this.clearAccount();
+        this.account = null;
+      }
+    }
+
     if (!this.account) {
       log.info("首次使用，开始登录...");
       await this.login();
@@ -696,6 +707,83 @@ export class WeixinChannel implements Channel {
     } catch {
       log.warn("加载账号失败");
     }
+  }
+
+  private async clearAccount(): Promise<void> {
+    for (const file of [this.accountFile(), this.syncFile()]) {
+      if (existsSync(file)) {
+        await unlink(file);
+      }
+    }
+    // Also clear tokens file
+    const tokensFile = join(getAccountsDir(), "weixin-tokens.json");
+    if (existsSync(tokensFile)) {
+      await unlink(tokensFile);
+    }
+  }
+
+  private promptReuse(): Promise<boolean> {
+    return new Promise((resolve) => {
+      const id = this.account!.accountId;
+      const display = id.length > 12 ? id.slice(0, 6) + "..." + id.slice(-4) : id;
+      const options = ["继续使用当前账号", "重新扫码登录"];
+      let selected = 0;
+
+      const render = () => {
+        // Move cursor up to redraw (except first render)
+        process.stdout.write(`\x1b[${options.length}A`);
+        for (let i = 0; i < options.length; i++) {
+          const prefix = i === selected ? "\x1b[36m❯\x1b[0m" : " ";
+          const text = i === selected ? `\x1b[1m${options[i]}\x1b[0m` : `\x1b[2m${options[i]}\x1b[0m`;
+          process.stdout.write(`\x1b[2K  ${prefix} ${text}\n`);
+        }
+      };
+
+      console.log(`\x1b[32m?\x1b[0m 检测到已登录账号 (${display})，请选择: \x1b[2m(↑↓ 选择, 回车确认)\x1b[0m`);
+      // Print initial placeholders
+      for (let i = 0; i < options.length; i++) {
+        console.log();
+      }
+      render();
+
+      if (!process.stdin.isTTY) {
+        // Non-interactive: default to reuse
+        resolve(true);
+        return;
+      }
+
+      process.stdin.setRawMode(true);
+      process.stdin.resume();
+
+      const onData = (data: Buffer) => {
+        const key = data.toString();
+        if (key === "\x1b[A" || key === "k") {
+          // Up
+          selected = (selected - 1 + options.length) % options.length;
+          render();
+        } else if (key === "\x1b[B" || key === "j") {
+          // Down
+          selected = (selected + 1) % options.length;
+          render();
+        } else if (key === "\r" || key === "\n") {
+          // Enter
+          cleanup();
+          resolve(selected === 0);
+        } else if (key === "\x03") {
+          // Ctrl+C
+          cleanup();
+          process.exit(0);
+        }
+      };
+
+      const cleanup = () => {
+        process.stdin.removeListener("data", onData);
+        process.stdin.setRawMode(false);
+        process.stdin.pause();
+      };
+
+      process.stdin.on("data", onData);
+    });
   }
 
   private async saveSyncBuf(): Promise<void> {
