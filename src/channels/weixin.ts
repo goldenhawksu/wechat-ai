@@ -765,7 +765,13 @@ export class WeixinChannel implements Channel {
         return;
       }
 
-      process.stdin.setRawMode(true);
+      try {
+        process.stdin.setRawMode(true);
+      } catch {
+        // Some Windows terminals (e.g. Git Bash MinTTY) don't support raw mode
+        resolve(true);
+        return;
+      }
       process.stdin.resume();
 
       const onData = (data: Buffer) => {

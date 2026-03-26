@@ -133,9 +133,10 @@ async function autoUpdate(currentVersion: string): Promise<void> {
 
   try {
     const { execSync } = await import("node:child_process");
-    const latest = execSync("npm view wechat-ai version 2>/dev/null", {
+    const latest = execSync("npm view wechat-ai version", {
       encoding: "utf-8",
       timeout: 5000,
+      stdio: ["pipe", "pipe", "ignore"],
     }).trim();
 
     if (!latest || latest === currentVersion) return;
@@ -154,7 +155,8 @@ async function autoUpdate(currentVersion: string): Promise<void> {
     console.log(`\x1b[32m✓\x1b[0m 更新完成，正在重启...\n`);
 
     // Re-exec with the new version
-    execSync(`"${process.execPath}" "${process.argv[1]}" ${process.argv.slice(2).join(" ")}`, {
+    const { spawnSync } = await import("node:child_process");
+    spawnSync(process.execPath, [process.argv[1]!, ...process.argv.slice(2)], {
       stdio: "inherit",
     });
     process.exit(0);
@@ -272,6 +274,7 @@ async function main() {
       const out = openSync(logFile, "a");
       const child = spawn(process.execPath, [join(__dirname, "cli.js")], {
         detached: true,
+        windowsHide: true,
         stdio: ["ignore", out, out],
         env: { ...process.env, WAI_DAEMON: "1" },
       });
@@ -313,13 +316,26 @@ async function main() {
       }
 
       const follow = args.includes("-f") || args.includes("--follow");
-      const { execSync, spawn: spawnLog } = await import("node:child_process");
+      const { readFileSync, statSync, watchFile, unwatchFile, createReadStream } = await import("node:fs");
+
+      // Show last 100 lines
+      const content = readFileSync(logPath, "utf-8");
+      const lines = content.split("\n");
+      process.stdout.write(lines.slice(-101).join("\n"));
 
       if (follow) {
-        const tail = spawnLog("tail", ["-f", logPath], { stdio: "inherit" });
-        tail.on("close", () => process.exit(0));
-      } else {
-        execSync(`tail -100 "${logPath}"`, { stdio: "inherit" });
+        let position = statSync(logPath).size;
+        const check = () => {
+          let newSize: number;
+          try { newSize = statSync(logPath).size; } catch { return; }
+          if (newSize > position) {
+            const stream = createReadStream(logPath, { start: position, encoding: "utf-8" });
+            stream.on("data", (chunk) => process.stdout.write(String(chunk)));
+            stream.on("end", () => { position = newSize; });
+          }
+        };
+        watchFile(logPath, { interval: 500 }, check);
+        process.on("SIGINT", () => { unwatchFile(logPath); process.exit(0); });
       }
       break;
     }
