@@ -207,6 +207,13 @@ async function main() {
         console.log("\x1b[33m⚠\x1b[0m 已自动清理 API Key 中的特殊引号字符");
       }
       config.providers[provider]!.apiKey = cleanKey;
+
+      // Auto-switch default if current default has no key
+      if (config.defaultProvider !== provider && !isProviderReady(config.providers[config.defaultProvider]!)) {
+        config.defaultProvider = provider;
+        console.log(`\x1b[36mℹ\x1b[0m 默认模型已自动切换到 ${provider}`);
+      }
+
       await saveConfig(config);
       console.log(`\x1b[32m✓\x1b[0m 已保存 ${provider} 的 API Key`);
       break;
