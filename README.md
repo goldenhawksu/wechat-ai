@@ -2,9 +2,29 @@
 
 微信 AI 机器人 — 一条命令连接微信与任意 AI 模型。
 
+基于微信官方 iLink Bot API 构建，合规、稳定、不怕封号。
+
 <p align="center">
   <img src="docs/screenshot.png" width="800" alt="wechat-ai screenshot" />
 </p>
+
+## 特性
+
+- **一条命令启动** — `npx wechat-ai`，扫码即用，零配置门槛
+- **8+ 内置模型** — Claude、GPT、Gemini、Qwen、DeepSeek、MiniMax、GLM，一键切换
+- **300+ 第三方模型** — 通过 OpenRouter 接入，`/model vendor/model` 随时切换
+- **微信官方协议** — 基于 iLink Bot API（`ilinkai.weixin.qq.com`），非逆向、非第三方
+- **Claude Agent 模式** — 不只是聊天，还能执行代码、读写文件、搜索网页
+- **语音收发** — 语音消息自动转文字 (Whisper ASR)，支持语音回复 (TTS)
+- **图片生成** — `/画 <描述>` 直接在微信里生图
+- **图片理解** — 发图片自动切换到视觉模型分析
+- **MCP 工具扩展** — 通过 [Model Context Protocol](https://modelcontextprotocol.io) 接入任意外部工具
+- **Function Calling** — 所有模型均支持工具调用
+- **中间件系统** — Koa 风格洋葱模型，方便二次开发
+- **Skills 人设系统** — 预设翻译官、程序员、写手等角色，一键切换
+- **Webhook API** — HTTP 接口主动推送消息，方便集成外部系统
+- **后台运行** — Daemon 模式，支持开机自启
+- **可编程 API** — 同时作为 npm 库导出，支持嵌入你自己的项目
 
 ## 快速开始
 
@@ -106,47 +126,179 @@ wechat-ai set openrouter sk-or-xxx
 /ping                                检查状态
 ```
 
+## 高级配置
+
+配置文件位于 `~/.wai/config.json`，以下为可选的高级功能。
+
+### Webhook（HTTP 消息推送）
+
+启用后可通过 HTTP API 主动向微信用户发送消息：
+
+```json
+{
+  "webhook": {
+    "enabled": true,
+    "port": 4800,
+    "secret": "your-secret"
+  }
+}
+```
+
+```bash
+curl -X POST http://localhost:4800 \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-secret" \
+  -d '{"targetId": "wxid_xxx", "text": "Hello from API"}'
+```
+
+### 语音消息 (ASR / TTS)
+
+```json
+{
+  "asr": {
+    "provider": "whisper",
+    "apiKey": "sk-xxx"
+  },
+  "tts": {
+    "provider": "openai",
+    "apiKey": "sk-xxx",
+    "voice": "alloy"
+  }
+}
+```
+
+- **ASR**：收到语音消息自动转文字，支持 Whisper
+- **TTS**：AI 回复自动合成语音，支持 OpenAI / Gemini
+
+### MCP 工具
+
+通过 [MCP](https://modelcontextprotocol.io) 协议接入外部工具，所有模型均可调用：
+
+```json
+{
+  "mcpServers": {
+    "weather": {
+      "command": "npx",
+      "args": ["-y", "@weather/mcp-server"]
+    },
+    "remote-api": {
+      "transport": "streamable-http",
+      "url": "https://api.example.com/mcp"
+    }
+  }
+}
+```
+
+支持 `stdio`、`sse`、`streamable-http` 三种传输方式。
+
+### Skills 人设
+
+预设不同 AI 角色，在微信中通过 `/skill` 切换：
+
+```json
+{
+  "skills": {
+    "translator": {
+      "description": "英汉翻译",
+      "systemPrompt": "你是一个专业翻译，用户发中文你翻英文，发英文你翻中文。"
+    },
+    "coder": {
+      "description": "编程助手",
+      "systemPrompt": "你是一个资深程序员，用简洁的代码和清晰的解释回答问题。",
+      "provider": "claude"
+    }
+  }
+}
+```
+
 ## 架构
 
 ```
-微信 ──ilink──> wechat-ai 网关 ──路由──> AI 模型
-                    │                   │
-               会话管理            ┌────┴─────────┐
-               模型路由            │              │
-                             Claude Agent   OpenAI 兼容
-                             (工具: Bash,   (Qwen, DeepSeek,
-                              Read, Web)    GPT, Gemini,
-                                            OpenRouter 300+)
+微信用户
+  │
+  ▼
+微信服务器
+  │
+  ▼ (iLink Bot API — 微信官方协议)
+  │
+wechat-ai 网关
+  ├── 会话管理（per-user 独立上下文）
+  ├── 消息聚合（防抖合并连续消息）
+  ├── 中间件链（Koa 风格洋葱模型）
+  ├── MCP 工具管理
+  ├── ASR / TTS 语音处理
+  └── 模型路由
+        │
+        ├── Claude Agent SDK（工具: Bash, 文件读写, Web 搜索）
+        └── OpenAI 兼容 API（Qwen, DeepSeek, GPT, Gemini, OpenRouter 300+）
 ```
+
+### 技术栈
+
+| 组件 | 技术 |
+|------|------|
+| 语言 | TypeScript (ESM) |
+| 运行时 | Node.js 22+ |
+| 微信协议 | iLink Bot API（官方） |
+| AI 接入 | Claude Agent SDK + OpenAI 兼容 API |
+| 工具扩展 | Model Context Protocol (MCP) |
+| 构建 | tsup |
 
 ## 项目结构
 
 ```
 src/
 ├── cli.ts                    命令行入口
-├── gateway.ts                消息路由 & 会话管理
-├── config.ts                 配置 (~/.wai/config.json)
+├── gateway.ts                消息网关 & 会话管理 & Webhook 服务
+├── config.ts                 配置管理 (~/.wai/config.json)
 ├── types.ts                  核心接口定义
-├── channels/weixin.ts        微信 ilink 协议实现
+├── mcp.ts                    MCP 客户端管理
+├── asr.ts                    语音转文字 (Whisper)
+├── tts.ts                    文字转语音 (OpenAI / Gemini)
+├── channels/
+│   └── weixin.ts             微信 iLink 协议实现
 └── providers/
-    ├── claude-agent.ts       Claude Agent SDK
-    └── openai-compatible.ts  通用 OpenAI 兼容
+    ├── claude-agent.ts       Claude Agent SDK 接入
+    └── openai-compatible.ts  通用 OpenAI 兼容 API
+```
+
+## 作为库使用
+
+wechat-ai 同时导出为 npm 库，可嵌入你自己的项目：
+
+```bash
+npm install wechat-ai
+```
+
+```typescript
+import { Gateway } from "wechat-ai";
+
+const gw = new Gateway(config);
+gw.use(async (ctx, next) => {
+  console.log(`收到消息: ${ctx.message.text}`);
+  await next();
+});
+await gw.start();
 ```
 
 ## 计划
 
-- [x] 微信 ilink 协议
+- [x] 微信 iLink 官方协议
 - [x] 多模型切换 (`/model`)
-- [x] 输入状态提示
+- [x] 输入状态提示（正在输入...）
 - [x] 8 个内置模型 + OpenRouter 300+
-- [x] npm 发布
+- [x] npm 发布 (CLI + Library)
 - [x] 中间件系统
-- [x] MCP 客户端支持
-- [x] 所有模型 Function Calling
+- [x] MCP 客户端 & 全模型 Function Calling
 - [x] 后台运行 (daemon 模式)
-- [ ] 图片/文件收发
-- [ ] 语音消息 (ASR/TTS)
+- [x] Webhook HTTP API
+- [x] Skills 人设系统
+- [x] 语音消息 (ASR / TTS)
+- [x] 图片理解（自动切换视觉模型）
+- [x] 图片生成 (`/画`)
+- [ ] Web 管理面板
 - [ ] Telegram / Discord 渠道
+- [ ] 群聊支持
 
 ## 协议
 
