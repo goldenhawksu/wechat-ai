@@ -353,26 +353,43 @@ async function main() {
       const { getAccountsDir } = await import("./config.js");
       const { rmSync } = await import("node:fs");
       const accountsDir = getAccountsDir();
-      const files = ["weixin.json", "weixin-sync.json", "weixin-tokens.json", "weixin-guide-sent.json"];
-      const dirs = ["whatsapp-auth"];
+      const target = args[1]?.toLowerCase(); // e.g. "wechat-ai logout whatsapp"
+
+      const channelData: Record<string, { files?: string[]; dirs?: string[] }> = {
+        weixin: { files: ["weixin.json", "weixin-sync.json", "weixin-tokens.json", "weixin-guide-sent.json"] },
+        whatsapp: { dirs: ["whatsapp-auth"] },
+      };
+
+      const channels = target && channelData[target]
+        ? { [target]: channelData[target] }
+        : channelData; // no arg = logout all
+
+      if (target && !channelData[target]) {
+        console.log(`未知渠道: ${target}（可选: ${Object.keys(channelData).join(", ")}）`);
+        break;
+      }
+
       let cleared = false;
-      for (const f of files) {
-        const p = join(accountsDir, f);
-        if (existsSync(p)) {
-          unlinkSync(p);
-          cleared = true;
+      for (const [chName, data] of Object.entries(channels)) {
+        for (const f of data.files || []) {
+          const p = join(accountsDir, f);
+          if (existsSync(p)) {
+            unlinkSync(p);
+            cleared = true;
+          }
+        }
+        for (const d of data.dirs || []) {
+          const p = join(accountsDir, d);
+          if (existsSync(p)) {
+            rmSync(p, { recursive: true, force: true });
+            cleared = true;
+          }
+        }
+        if (cleared) {
+          console.log(`\x1b[32m✓\x1b[0m ${chName} 已退出登录，下次启动将重新扫码`);
         }
       }
-      for (const d of dirs) {
-        const p = join(accountsDir, d);
-        if (existsSync(p)) {
-          rmSync(p, { recursive: true, force: true });
-          cleared = true;
-        }
-      }
-      if (cleared) {
-        console.log(`\x1b[32m✓\x1b[0m 已退出登录，下次启动将重新扫码`);
-      } else {
+      if (!cleared) {
         console.log("当前没有已登录的账号");
       }
       break;

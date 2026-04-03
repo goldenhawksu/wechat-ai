@@ -130,13 +130,18 @@ export class Gateway {
 
     this.startWebhook();
 
+    // Prompt for saved sessions before starting channels
+    if (!process.env.WAI_DAEMON) {
+      await this.promptSavedSessions();
+    }
+
+    // Start all channels in parallel (interactive prompts already handled above)
     const startPromises = [...this.channels.entries()].map(([name, channel]) => {
       log.debug(`启动渠道: ${name}`);
       return channel.start((msg) => this.handleMessage(msg)).catch((err) => {
         log.error(`渠道 ${name} 异常: ${err instanceof Error ? err.message : err}`);
       });
     });
-
     await Promise.all(startPromises);
   }
 
@@ -549,6 +554,118 @@ export class Gateway {
       await fn(ctx, () => dispatch(i + 1));
     };
     await dispatch(0);
+  }
+
+  // action states: "keep" = 继续使用, "rescan" = 重新扫码, "skip" = 跳过, "new" = 新登录
+  private async promptSavedSessions(): Promise<void> {
+    type Action = "keep" | "rescan" | "skip" | "new";
+    // Collect all channels that support session management
+    const choices: Array<{ name: string; channel: Channel; label: string; hasSession: boolean; action: Action }> = [];
+    for (const [name, channel] of this.channels) {
+      if (channel.hasSession) {
+        const has = channel.hasSession();
+        choices.push({
+          name,
+          channel,
+          label: channel.sessionLabel?.() || name,
+          hasSession: has,
+          action: has ? "keep" : "new",
+        });
+      }
+    }
+    if (choices.length === 0) return;
+    // If no channel has a saved session, skip prompt
+    if (!choices.some((c) => c.hasSession)) return;
+
+    // Actions a logged-in channel can cycle through
+    const sessionActions: Action[] = ["keep", "rescan", "skip"];
+
+    const actionDisplay = (ch: (typeof choices)[0]) => {
+      switch (ch.action) {
+        case "keep": return `\x1b[32m继续使用\x1b[0m`;
+        case "rescan": return `\x1b[33m重新扫码\x1b[0m`;
+        case "skip": return `\x1b[31m跳过\x1b[0m`;
+        case "new": return `\x1b[36m新登录\x1b[0m`;
+      }
+    };
+
+    return new Promise((resolve) => {
+      let cursor = 0;
+
+      const render = () => {
+        process.stdout.write(`\x1b[${choices.length}A`);
+        for (let i = 0; i < choices.length; i++) {
+          const ch = choices[i]!;
+          const pointer = i === cursor ? "\x1b[36m❯\x1b[0m" : " ";
+          const label = `\x1b[1m${ch.name}\x1b[0m \x1b[2m(${ch.label})\x1b[0m`;
+          process.stdout.write(`\x1b[2K  ${pointer} ${label}  ${actionDisplay(ch)}\n`);
+        }
+      };
+
+      console.log(`\x1b[32m?\x1b[0m 渠道登录状态，按 \x1b[1m空格\x1b[0m「切换」，\x1b[1m回车\x1b[0m「确认」:`);
+      for (let i = 0; i < choices.length; i++) console.log();
+      render();
+
+      if (!process.stdin.isTTY) {
+        resolve();
+        return;
+      }
+
+      try {
+        process.stdin.setRawMode(true);
+      } catch {
+        resolve();
+        return;
+      }
+      process.stdin.resume();
+
+      const onData = (data: Buffer) => {
+        const key = data.toString();
+        if (key === "\x1b[A" || key === "k") {
+          cursor = (cursor - 1 + choices.length) % choices.length;
+          render();
+        } else if (key === "\x1b[B" || key === "j") {
+          cursor = (cursor + 1) % choices.length;
+          render();
+        } else if (key === " ") {
+          const ch = choices[cursor]!;
+          if (ch.hasSession) {
+            // Cycle: keep → rescan → skip → keep
+            const idx = sessionActions.indexOf(ch.action);
+            ch.action = sessionActions[(idx + 1) % sessionActions.length]!;
+          }
+          render();
+        } else if (key === "\r" || key === "\n") {
+          cleanup();
+          this.applySessionChoices(choices).then(resolve);
+        } else if (key === "\x03") {
+          cleanup();
+          process.exit(0);
+        }
+      };
+
+      const cleanup = () => {
+        process.stdin.removeListener("data", onData);
+        process.stdin.setRawMode(false);
+        process.stdin.pause();
+      };
+
+      process.stdin.on("data", onData);
+    });
+  }
+
+  private async applySessionChoices(
+    choices: Array<{ name: string; channel: Channel; action: string }>,
+  ): Promise<void> {
+    for (const ch of choices) {
+      if (ch.action === "rescan" && ch.channel.clearSession) {
+        log.info(`${ch.name}: 清除旧会话，将重新扫码登录...`);
+        await ch.channel.clearSession();
+      } else if (ch.action === "skip") {
+        log.info(`${ch.name}: 已跳过`);
+        this.channels.delete(ch.name);
+      }
+    }
   }
 
   private startWebhook(): void {

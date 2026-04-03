@@ -1,9 +1,15 @@
 import { createLogger } from "../logger.js";
 import { getAccountsDir, ensureDir } from "../config.js";
 import { join } from "node:path";
+import { existsSync, rmSync } from "node:fs";
 import type { Channel, InboundMessage, OutboundMessage, ChannelConfig, MediaAttachment } from "../types.js";
 
 const log = createLogger("whatsapp");
+
+function maskId(id: string): string {
+  if (id.length <= 6) return id;
+  return id.slice(0, 4) + "****" + id.slice(-3);
+}
 
 export class WhatsAppChannel implements Channel {
   readonly name = "whatsapp";
@@ -11,6 +17,7 @@ export class WhatsAppChannel implements Channel {
   private sock: any = null;
   private running = false;
   private onMessageCallback: ((msg: InboundMessage) => void) | null = null;
+  private qrPrintedLines = 0; // track lines printed for QR overwrite
   // Saved references for reconnect
   private makeSocket: any = null;
   private authState: any = null;
@@ -19,6 +26,22 @@ export class WhatsAppChannel implements Channel {
   private cacheKeyStore: any = null;
 
   constructor(_config: ChannelConfig) {}
+
+  private get authDir(): string {
+    return join(getAccountsDir(), "whatsapp-auth");
+  }
+
+  hasSession(): boolean {
+    return existsSync(join(this.authDir, "creds.json"));
+  }
+
+  sessionLabel(): string {
+    return "whatsapp";
+  }
+
+  async clearSession(): Promise<void> {
+    rmSync(this.authDir, { recursive: true, force: true });
+  }
 
   async login(): Promise<void> {}
 
@@ -45,10 +68,9 @@ export class WhatsAppChannel implements Channel {
     this.makeSocket = makeWASocket?.default || makeWASocket;
     this.cacheKeyStore = makeCacheableSignalKeyStore;
 
-    const authDir = join(getAccountsDir(), "whatsapp-auth");
-    await ensureDir(authDir);
+    await ensureDir(this.authDir);
 
-    const { state, saveCreds } = await useMultiFileAuthState(authDir);
+    const { state, saveCreds } = await useMultiFileAuthState(this.authDir);
     this.authState = state;
     this.saveCreds = saveCreds;
 
@@ -89,12 +111,25 @@ export class WhatsAppChannel implements Channel {
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
-        log.info("请用 WhatsApp 扫描二维码:");
+        // Clear previous QR code by moving cursor up
+        if (this.qrPrintedLines > 0) {
+          process.stdout.write(`\x1b[${this.qrPrintedLines}A\x1b[J`);
+        } else {
+          log.info("请用 WhatsApp 扫描二维码:");
+        }
         try {
           const qrTerminal = await import("qrcode-terminal");
-          (qrTerminal.default || qrTerminal).generate(qr, { small: true });
+          // Capture QR output to count lines
+          let qrStr = "";
+          const gen = (qrTerminal.default || qrTerminal).generate as any;
+          gen(qr, { small: true }, (output: string) => {
+            qrStr = output;
+          });
+          console.log(qrStr);
+          this.qrPrintedLines = qrStr.split("\n").length + 1;
         } catch {
           console.log(qr);
+          this.qrPrintedLines = qr.split("\n").length + 1;
         }
       }
 
@@ -102,7 +137,7 @@ export class WhatsAppChannel implements Channel {
         const statusCode = lastDisconnect?.error?.output?.statusCode;
 
         if (statusCode === 401) {
-          log.warn("WhatsApp 已登出，请删除 ~/.wai/accounts/whatsapp-auth/ 后重新登录");
+          log.warn("WhatsApp 已登出，请运行 wechat-ai logout whatsapp 后重新启动");
           this.running = false;
           return;
         }
@@ -117,6 +152,7 @@ export class WhatsAppChannel implements Channel {
       }
 
       if (connection === "open") {
+        this.qrPrintedLines = 0;
         log.info("WhatsApp 已上线");
       }
     });
@@ -212,7 +248,7 @@ export class WhatsAppChannel implements Channel {
       for (const chunk of chunks) {
         await this.sock.sendMessage(jid, { text: chunk });
       }
-      log.info(`已回复 (${msg.text.length} 字符) → ${jid.replace(/@.*$/, "").slice(0, 8)}...`);
+      log.info(`已回复 (${msg.text.length} 字符) → ${maskId(jid.replace(/@.*$/, ""))}`);
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       log.error(`发送失败: ${errMsg}`);
@@ -227,6 +263,7 @@ export class WhatsAppChannel implements Channel {
     }
     log.info("已停止");
   }
+
 
   private chunkText(text: string, maxLen: number): string[] {
     if (text.length <= maxLen) return [text];
