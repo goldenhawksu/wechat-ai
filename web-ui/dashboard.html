@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ClawBot 平台 - 控制台</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f7fa;
+      min-height: 100vh;
+    }
+    .header {
+      background: white;
+      padding: 20px 40px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .header h1 { color: #333; }
+    .header button {
+      padding: 10px 20px;
+      background: #e74c3c;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .container { padding: 40px; max-width: 1200px; margin: 0 auto; }
+    .card {
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+      margin-bottom: 20px;
+    }
+    .card h2 { margin-bottom: 20px; color: #333; }
+    .form-group { margin-bottom: 20px; }
+    label { display: block; margin-bottom: 8px; color: #666; }
+    input, select {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #eee;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+    button {
+      padding: 12px 24px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .status { padding: 10px 20px; border-radius: 8px; margin-bottom: 20px; }
+    .status.active { background: #d4edda; color: #155724; }
+    .status.expired { background: #f8d7da; color: #721c24; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🤖 ClawBot 控制台</h1>
+    <button onclick="logout()">退出</button>
+  </div>
+
+  <div class="container">
+    <div class="card">
+      <h2>账户状态</h2>
+      <div id="status" class="status">加载中...</div>
+    </div>
+
+    <div class="card">
+      <h2>API 配置</h2>
+      <div class="form-group">
+        <label>模型选择</label>
+        <select id="provider">
+          <option value="qwen">通义千问 (Qwen)</option>
+          <option value="deepseek">DeepSeek</option>
+          <option value="claude">Claude</option>
+          <option value="gpt">GPT</option>
+          <option value="gemini">Gemini</option>
+          <option value="custom">自定义</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>API Key</label>
+        <input type="password" id="apiKey" placeholder="sk-xxx">
+      </div>
+      <div class="form-group" id="baseUrlGroup" style="display: none;">
+        <label>Base URL (可选)</label>
+        <input type="text" id="baseUrl" placeholder="https://api.example.com/v1">
+      </div>
+      <button onclick="saveConfig()">保存配置</button>
+    </div>
+
+    <div class="card">
+      <h2>使用说明</h2>
+      <p>1. 配置您的 API Key</p>
+      <p>2. 在微信中找到"微信ClawBot"</p>
+      <p>3. 发送消息开始对话</p>
+      <p style="margin-top: 20px; color: #e74c3c;">会话有效期: 7天 (到期后需重新扫码激活)</p>
+    </div>
+  </div>
+
+  <script>
+    const userId = localStorage.getItem('userId');
+    if (!userId) window.location.href = '/login.html';
+
+    // Load status
+    async function loadStatus() {
+      const res = await fetch(`/api/auth/me`, {
+        headers: { 'X-User-Id': userId }
+      });
+      const data = await res.json();
+
+      const statusDiv = document.getElementById('status');
+      if (data.loggedIn) {
+        const expires = new Date(data.expiresAt).toLocaleString();
+        statusDiv.className = 'status active';
+        statusDiv.innerHTML = `✓ 已登录 | 过期时间: ${expires}`;
+      } else {
+        statusDiv.className = 'status expired';
+        statusDiv.innerHTML = `⚠ 会话已过期，请重新扫码激活`;
+      }
+    }
+
+    // Load config
+    async function loadConfig() {
+      const res = await fetch(`/api/config`, {
+        headers: { 'X-User-Id': userId }
+      });
+      const data = await res.json();
+
+      if (data.defaultProvider) {
+        document.getElementById('provider').value = data.defaultProvider;
+      }
+    }
+
+    // Save config
+    async function saveConfig() {
+      const provider = document.getElementById('provider').value;
+      const apiKey = document.getElementById('apiKey').value;
+      const baseUrl = document.getElementById('baseUrl').value;
+
+      const res = await fetch(`/api/config/provider/${provider}/key`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': userId
+        },
+        body: JSON.stringify({ apiKey, baseUrl: baseUrl || undefined })
+      });
+
+      const data = await res.json();
+      alert(data.success ? '保存成功' : data.error);
+    }
+
+    // Show/hide base URL
+    document.getElementById('provider').addEventListener('change', (e) => {
+      document.getElementById('baseUrlGroup').style.display =
+        e.target.value === 'custom' ? 'block' : 'none';
+    });
+
+    // Logout
+    function logout() {
+      localStorage.removeItem('userId');
+      window.location.href = '/login.html';
+    }
+
+    loadStatus();
+    loadConfig();
+  </script>
+</body>
+</html>
