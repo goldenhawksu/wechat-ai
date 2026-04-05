@@ -8,7 +8,7 @@ import {
   extendUserSession,
   getUserSession,
   saveUserSession,
-  getUserConfig,
+  getUserConfig as getUserConfigFromStore,
   createDefaultUserConfig,
   saveUserConfig,
   useInviteCode,
@@ -29,7 +29,7 @@ export class SessionManager {
     contextToken?: string
   ): Promise<{ response: string; userId: string } | null> {
     // Find user by WeChat ID
-    let user = getUserByWechatId(wechatSenderId);
+    const user = getUserByWechatId(wechatSenderId);
 
     if (!user) {
       // User not registered - they need to register via web first
@@ -54,7 +54,7 @@ export class SessionManager {
     updateUserActivity(user.id);
 
     // Get user config
-    let config = getUserConfig(user.id);
+    let config = getUserConfigFromStore(user.id);
     if (!config) {
       config = createDefaultUserConfig(user.id);
     }
@@ -116,7 +116,7 @@ export class SessionManager {
       return false;
     }
 
-    // Check if user exists and is expired (recovery scenario)
+    // Check if user exists
     const user = getUser(userId);
     if (!user) {
       return false;
@@ -160,14 +160,14 @@ export class SessionManager {
    * Get user configuration
    */
   getUserConfig(userId: string): UserConfig | null {
-    return getUserConfig(userId);
+    return getUserConfigFromStore(userId);
   }
 
   /**
    * Update user configuration
    */
   updateUserConfig(userId: string, updates: Partial<UserConfig>): boolean {
-    const existing = getUserConfig(userId);
+    const existing = getUserConfigFromStore(userId);
     if (!existing) return false;
 
     const updated: UserConfig = {
