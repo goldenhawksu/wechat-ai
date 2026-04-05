@@ -231,3 +231,82 @@ export interface ChannelConfig {
   enabled?: boolean;
   [key: string]: unknown;
 }
+
+// ============ Platform Types ============
+
+export interface PlatformUser {
+  /** Unique user ID (UUID) */
+  id: string;
+  /** WeChat sender ID (from iLink) */
+  wechatId?: string;
+  /** Display name */
+  name?: string;
+  /** Invite code used to register */
+  inviteCode: string;
+  /** Registration timestamp */
+  createdAt: number;
+  /** Last activity timestamp */
+  lastActiveAt: number;
+  /** Session expiration timestamp (createdAt + 7 days) */
+  expiresAt: number;
+  /** Whether user is active */
+  isActive: boolean;
+}
+
+export interface UserConfig {
+  /** User ID */
+  userId: string;
+  /** Default AI provider */
+  defaultProvider: string;
+  /** Provider configurations (API keys, etc.) */
+  providers: Record<string, ProviderConfig>;
+  /** Custom skills */
+  skills?: Record<string, SkillConfig>;
+  /** MCP server configurations */
+  mcpServers?: Record<string, McpServerConfig>;
+  /** System prompt */
+  systemPrompt?: string;
+  /** Updated timestamp */
+  updatedAt: number;
+}
+
+export interface UserSession {
+  /** User ID */
+  userId: string;
+  /** Conversation context for this user */
+  conversationContext: Map<string, unknown>;
+  /** Last context_token from WeChat */
+  lastContextToken?: string;
+  /** Last active timestamp */
+  lastActiveAt: number;
+}
+
+export interface InviteCode {
+  /** The invite code string */
+  code: string;
+  /** Who created this code */
+  createdBy: string;
+  /** Creation timestamp */
+  createdAt: number;
+  /** Max uses (0 = unlimited) */
+  maxUses: number;
+  /** Current use count */
+  useCount: number;
+  /** Whether code is active */
+  isActive: boolean;
+  /** Expiration timestamp (optional) */
+  expiresAt?: number;
+}
+
+export interface PlatformConfig {
+  /** Session duration in days (default: 7) */
+  sessionDurationDays: number;
+  /** Web server port */
+  webPort: number;
+  /** Admin secret for invite code generation */
+  adminSecret: string;
+  /** Default provider for new users */
+  defaultProvider: string;
+  /** Default provider config template */
+  defaultProviderConfig?: ProviderConfig;
+}
