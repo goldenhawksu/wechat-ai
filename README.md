@@ -305,9 +305,88 @@ await gw.start();
 - [x] 图片理解（自动切换视觉模型）
 - [x] 图片生成 (`/画`)
 - [x] 全模型 Agent 能力 (claw-agent-sdk)
-- [ ] Web 管理面板
+- [x] Web 管理面板 (多租户平台)
 - [ ] Telegram / Discord 渠道
 - [ ] 群聊支持
+
+## 多租户平台模式 (v0.5.0+)
+
+wechat-ai 现在支持多租户 SaaS 模式，可以作为平台服务多个用户。
+
+### 平台架构
+
+```
+平台管理员
+    │
+    ├── 生成邀请码
+    │
+用户注册
+    │
+    ├── 配置个人 API Key
+    │
+微信扫码绑定
+    │
+用户发送消息 → 平台路由 → 用户专属 Agent → 回复
+```
+
+### 快速开始
+
+#### 1. 启动平台
+
+```bash
+wechat-ai
+```
+
+平台将启动:
+- Web 管理界面: http://localhost:3000
+- 微信 Bot 服务
+
+#### 2. 生成邀请码
+
+```bash
+wechat-ai invite create 5  # 创建5个邀请码
+```
+
+#### 3. 用户注册
+
+用户访问 http://your-server:3000，输入邀请码注册。
+
+#### 4. 配置 API
+
+用户在控制台配置自己的 API Key。
+
+#### 5. 微信绑定
+
+用户在微信中找到"微信ClawBot"，发送消息开始对话。
+
+### 会话管理
+
+- **有效期**: 7天
+- **过期后**: 用户需重新访问管理页面扫码激活
+- **状态恢复**: 重新扫码后，之前的配置和会话上下文将被保留
+
+### 管理命令
+
+```bash
+# 邀请码管理
+wechat-ai invite create [数量]   # 创建邀请码
+wechat-ai invite list            # 列出邀请码
+wechat-ai invite revoke <码>     # 禁用邀请码
+
+# 用户管理
+wechat-ai user list              # 列出用户
+wechat-ai user info <id>         # 查看用户信息
+```
+
+### API 端点
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/api/auth/register` | POST | 邀请码注册 |
+| `/api/auth/me` | GET | 查看登录状态 |
+| `/api/config` | GET | 获取配置 |
+| `/api/config` | PUT | 更新配置 |
+| `/api/config/provider/:name/key` | POST | 设置 API Key |
 
 ## 协议
 
