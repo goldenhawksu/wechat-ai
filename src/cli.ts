@@ -380,6 +380,118 @@ async function main() {
       break;
     }
 
+    case "invite": {
+      const subCommand = args[1];
+
+      switch (subCommand) {
+        case "create": {
+          const count = parseInt(args[2] || "1") || 1;
+          const { createInviteCode } = await import("./storage/user-store.js");
+
+          console.log(`\n创建 ${count} 个邀请码:\n`);
+          for (let i = 0; i < count; i++) {
+            const invite = createInviteCode("admin", 1);
+            console.log(`  ${invite.code}`);
+          }
+          console.log("");
+          break;
+        }
+
+        case "list": {
+          const { listInviteCodes } = await import("./storage/user-store.js");
+          const codes = listInviteCodes();
+
+          if (codes.length === 0) {
+            console.log("暂无邀请码");
+            break;
+          }
+
+          console.log("\n邀请码列表:\n");
+          for (const code of codes) {
+            const status = code.isActive ? "\x1b[32m有效\x1b[0m" : "\x1b[31m已禁用\x1b[0m";
+            const uses = code.maxUses > 0 ? `${code.useCount}/${code.maxUses}` : `${code.useCount}/∞`;
+            console.log(`  ${code.code} - ${status} - 使用: ${uses}`);
+          }
+          console.log("");
+          break;
+        }
+
+        case "revoke": {
+          const code = args[2];
+          if (!code) {
+            console.log("用法: wechat-ai invite revoke <邀请码>");
+            process.exit(1);
+          }
+
+          const { revokeInviteCode } = await import("./storage/user-store.js");
+          const success = revokeInviteCode(code);
+          if (success) {
+            console.log(`\x1b[32m✓\x1b[0m 已禁用邀请码: ${code}`);
+          } else {
+            console.log(`\x1b[31m✗\x1b[0m 邀请码不存在: ${code}`);
+          }
+          break;
+        }
+
+        default:
+          console.log("用法: wechat-ai invite <create|list|revoke>");
+      }
+      break;
+    }
+
+    case "user": {
+      const subCommand = args[1];
+
+      switch (subCommand) {
+        case "list": {
+          const { listUsers } = await import("./storage/user-store.js");
+          const users = listUsers();
+
+          if (users.length === 0) {
+            console.log("暂无用户");
+            break;
+          }
+
+          console.log("\n用户列表:\n");
+          for (const user of users) {
+            const status = user.isActive && Date.now() < user.expiresAt ? "\x1b[32m活跃\x1b[0m" : "\x1b[31m过期\x1b[0m";
+            const wechat = user.wechatId ? ` (${user.wechatId.slice(-6)})` : "";
+            console.log(`  ${user.id.slice(0, 8)}...${wechat} - ${status}`);
+          }
+          console.log("");
+          break;
+        }
+
+        case "info": {
+          const userId = args[2];
+          if (!userId) {
+            console.log("用法: wechat-ai user info <用户ID>");
+            process.exit(1);
+          }
+
+          const { getSessionManager } = await import("./platform/session-manager.js");
+          const sessionManager = getSessionManager();
+          const status = sessionManager.getUserStatus(userId);
+
+          console.log(`\n用户状态:\n`);
+          console.log(`  ID: ${userId}`);
+          console.log(`  存在: ${status.exists}`);
+          console.log(`  已绑定: ${status.isLinked}`);
+          console.log(`  已过期: ${status.isExpired}`);
+          if (status.expiresAt) {
+            const expires = new Date(status.expiresAt);
+            console.log(`  过期时间: ${expires.toLocaleString()}`);
+          }
+          console.log("");
+          break;
+        }
+
+        default:
+          console.log("用法: wechat-ai user <list|info>");
+      }
+      break;
+    }
+
     default: {
       // Auto-update check
       await autoUpdate(VERSION);
@@ -412,6 +524,14 @@ async function main() {
 
       const gateway = new Gateway(config);
       gateway.init();
+
+      // Start web server for platform mode
+      const { createWebServer, startWebServer } = await import("./web/server.js");
+      const webPort = 3000;
+      const webApp = createWebServer();
+      startWebServer(webApp, webPort);
+      console.log(`\x1b[36mℹ\x1b[0m Web 管理界面: http://localhost:${webPort}`);
+      console.log("");
 
       const shutdown = async () => {
         await gateway.stop();
