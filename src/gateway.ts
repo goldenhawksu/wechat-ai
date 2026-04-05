@@ -9,6 +9,7 @@ import type {
   Middleware,
   Context,
 } from "./types.js";
+import { getSessionManager } from "./platform/session-manager.js";
 import { WeixinChannel } from "./channels/weixin.js";
 import { ClaudeAgentProvider } from "./providers/claude-agent.js";
 import { ClawAgentProvider } from "./providers/claw-agent.js";
@@ -253,6 +254,27 @@ export class Gateway {
     try {
       const channel = this.channels.get(msg.channel);
       if (!channel) return;
+
+      // Check if this is WeChat channel - use session manager for multi-tenant routing
+      if (msg.channel === "weixin") {
+        const sessionManager = getSessionManager();
+        const result = await sessionManager.handleIncomingMessage(
+          msg.senderId,
+          msg.text,
+          msg.replyToken
+        );
+
+        if (result && result.response) {
+          await channel.send({
+            targetId: msg.senderId,
+            text: result.response,
+            replyToken: msg.replyToken,
+          });
+          log.info(`已回复 (${result.response.length} 字符)`);
+        }
+
+        return;
+      }
 
       // Voice → text: transcribe voice messages before AI processing
       const voiceMedia = msg.media?.filter((m) => m.type === "voice" && m.url);
