@@ -11,7 +11,8 @@ export interface PlatformRequest {
 }
 
 export function authMiddleware(req: PlatformRequest, res: Response, next: NextFunction): void {
-  const userId = req.headers["x-user-id"] as string || req.session?.userId;
+  // 仅从 session 获取 userId，移除 header 认证
+  const userId = req.session?.userId;
 
   if (!userId) {
     res.status(401).json({ error: "未登录" });

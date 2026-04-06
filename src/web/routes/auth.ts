@@ -44,7 +44,7 @@ router.post("/register", async (req: PlatformRequest, res: Response) => {
 
 // Login check
 router.get("/me", async (req: PlatformRequest, res: Response) => {
-  const userId = (req.headers["x-user-id"] || req.session?.userId) as string | undefined;
+  const userId = req.session?.userId;  // 仅从 session 获取
 
   if (!userId) {
     res.json({ loggedIn: false });
