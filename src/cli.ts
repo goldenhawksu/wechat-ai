@@ -34,6 +34,7 @@ const HELP = `
     wechat-ai set qwen sk-xxx        设置通义千问 Key
     wechat-ai set deepseek sk-xxx    设置 DeepSeek Key
     wechat-ai set claude sk-xxx      设置 Claude Key
+    wechat-ai set kimi sk-xxx        设置 Kimi (Moonshot) Key
     wechat-ai set openrouter sk-xxx  设置 OpenRouter Key (第三方模型)
 
   \x1b[1m设置默认模型:\x1b[0m
@@ -87,11 +88,12 @@ function printBanner(defaultProvider: string): void {
   const sideR = inner - titleLen - sideL;
   const topBorder = `  ${b}╭${"─".repeat(sideL)}${c.reset}${c.bold}${c.white}${titleText}${c.reset}${b}${"─".repeat(sideR)}╮${c.reset}`;
 
-  // Icons: WeChat (green) ◄──► Claude (orange), centered
+  // Icons: Penguin (green) <==> Capybara (orange)
   const icons = [
-    `${c.green}╭───╮${c.reset}            ${c.orange}╭───╮${c.reset}`,
-    `${c.green}│° °│${c.reset}   ${c.dim}◄══►${c.reset}   ${c.orange}│◉ ◉│${c.reset}`,
-    `${c.green}╰─∪─╯${c.reset}            ${c.orange}╰─╮─╯${c.reset}`,
+    `${c.green}  /\\${c.reset}              ${c.orange}\\^^^/${c.reset}`,
+    `${c.green} (oo)${c.reset}    ${c.dim}<==>${c.reset}    ${c.orange}n   n${c.reset}`,
+    `${c.green}(/  \\)${c.reset}            ${c.orange}( Oo )${c.reset}`,
+    `${c.green} ^  ^${c.reset}             ${c.orange}'----'${c.reset}`,
   ];
 
   const welcome = `${c.bold}${c.white}Welcome!${c.reset}`;
@@ -349,19 +351,45 @@ async function main() {
 
     case "logout": {
       const { getAccountsDir } = await import("./config.js");
+      const { rmSync } = await import("node:fs");
       const accountsDir = getAccountsDir();
-      const files = ["weixin.json", "weixin-sync.json", "weixin-tokens.json", "weixin-guide-sent.json"];
+      const target = args[1]?.toLowerCase(); // e.g. "wechat-ai logout whatsapp"
+
+      const channelData: Record<string, { files?: string[]; dirs?: string[] }> = {
+        weixin: { files: ["weixin.json", "weixin-sync.json", "weixin-tokens.json", "weixin-guide-sent.json"] },
+        whatsapp: { dirs: ["whatsapp-auth"] },
+      };
+
+      const channels = target && channelData[target]
+        ? { [target]: channelData[target] }
+        : channelData; // no arg = logout all
+
+      if (target && !channelData[target]) {
+        console.log(`未知渠道: ${target}（可选: ${Object.keys(channelData).join(", ")}）`);
+        break;
+      }
+
       let cleared = false;
-      for (const f of files) {
-        const p = join(accountsDir, f);
-        if (existsSync(p)) {
-          unlinkSync(p);
-          cleared = true;
+      for (const [chName, data] of Object.entries(channels)) {
+        for (const f of data.files || []) {
+          const p = join(accountsDir, f);
+          if (existsSync(p)) {
+            unlinkSync(p);
+            cleared = true;
+          }
+        }
+        for (const d of data.dirs || []) {
+          const p = join(accountsDir, d);
+          if (existsSync(p)) {
+            rmSync(p, { recursive: true, force: true });
+            cleared = true;
+          }
+        }
+        if (cleared) {
+          console.log(`\x1b[32m✓\x1b[0m ${chName} 已退出登录，下次启动将重新扫码`);
         }
       }
-      if (cleared) {
-        console.log(`\x1b[32m✓\x1b[0m 已退出登录，下次启动将重新扫码`);
-      } else {
+      if (!cleared) {
         console.log("当前没有已登录的账号");
       }
       break;

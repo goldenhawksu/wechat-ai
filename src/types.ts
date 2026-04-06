@@ -51,6 +51,15 @@ export interface Channel {
   /** Initialize and authenticate */
   login(): Promise<void>;
 
+  /** Check if a saved session exists (for reuse prompt) */
+  hasSession?(): boolean;
+
+  /** Display label for the saved session (e.g. account ID) */
+  sessionLabel?(): string;
+
+  /** Clear saved session data so next start triggers re-login */
+  clearSession?(): Promise<void>;
+
   /** Start receiving messages. Calls onMessage for each inbound. */
   start(onMessage: (msg: InboundMessage) => void): Promise<void>;
 

@@ -1,8 +1,8 @@
 # wechat-ai
 
-微信 AI 机器人 — 一条命令连接微信与任意 AI 模型。
+多渠道 AI 机器人 — 一条命令连接微信、Discord、WhatsApp 与任意 AI 模型。
 
-基于微信官方 iLink Bot API 构建，合规、稳定、不怕封号。
+基于微信官方 iLink Bot API 构建，合规、稳定、不怕封号。同时支持 Discord Bot 和 WhatsApp 渠道。
 
 <p align="center">
   <img src="docs/screenshot.png" width="800" alt="wechat-ai screenshot" />
@@ -10,6 +10,7 @@
 
 ## 特性
 
+- **多渠道支持** — 微信、Discord、WhatsApp 三合一，统一管理
 - **一条命令启动** — `npx wechat-ai`，扫码即用，零配置门槛
 - **8+ 内置模型** — Claude、GPT、Gemini、Qwen、DeepSeek、MiniMax、GLM，一键切换
 - **300+ 第三方模型** — 通过 OpenRouter 接入，`/model vendor/model` 随时切换
@@ -73,6 +74,8 @@ wechat-ai                        # 启动（首次自动弹出二维码）
 wechat-ai set <模型> <key>        # 保存 API Key
 wechat-ai use <模型>              # 设置默认模型
 wechat-ai config                 # 查看配置（Key 已脱敏）
+wechat-ai logout                 # 退出所有渠道登录
+wechat-ai logout <渠道>           # 退出指定渠道（weixin / whatsapp）
 wechat-ai start                  # 后台运行（daemon 模式）
 wechat-ai stop                   # 停止后台进程
 wechat-ai logs                   # 查看后台日志
@@ -90,6 +93,7 @@ wechat-ai update                 # 更新到最新版
 | Gemini | gemini-2.0-flash | `wechat-ai set gemini <key>` | [申请](https://aistudio.google.com/apikey) |
 | MiniMax | MiniMax-Text-01 | `wechat-ai set minimax <key>` | [申请](https://platform.minimaxi.com/user-center/basic-information/interface-key) |
 | 智谱 (GLM) | glm-4-plus | `wechat-ai set glm <key>` | [申请](https://open.bigmodel.cn/usercenter/apikeys) |
+| Kimi (Moonshot) | moonshot-v1-8k | `wechat-ai set kimi <key>` | [申请](https://platform.moonshot.cn/console/api-keys) |
 | OpenRouter | 300+ 第三方模型 | `wechat-ai set openrouter <key>` | [申请](https://openrouter.ai/settings/keys) |
 
 支持任何 OpenAI 兼容 API，编辑 `~/.wai/config.json` 即可添加。
@@ -135,6 +139,41 @@ v0.4.0 起，所有模型均具备 Agent 能力：搜索网页、查天气资讯
 ## 高级配置
 
 配置文件位于 `~/.wai/config.json`，以下为可选的高级功能。
+
+### Discord 渠道
+
+在 `~/.wai/config.json` 中启用并填入 Bot Token：
+
+```json
+{
+  "channels": {
+    "discord": {
+      "type": "discord",
+      "enabled": true,
+      "token": "your-bot-token"
+    }
+  }
+}
+```
+
+Bot Token 在 [Discord Developer Portal](https://discord.com/developers/applications) 创建应用后获取。需开启 **Message Content Intent**。
+
+### WhatsApp 渠道
+
+在 `~/.wai/config.json` 中启用：
+
+```json
+{
+  "channels": {
+    "whatsapp": {
+      "type": "whatsapp",
+      "enabled": true
+    }
+  }
+}
+```
+
+首次启动会弹出二维码，用 WhatsApp 扫码绑定。如需重新绑定：`wechat-ai logout whatsapp`。
 
 ### Webhook（HTTP 消息推送）
 
@@ -220,14 +259,17 @@ curl -X POST http://localhost:4800 \
 ## 架构
 
 ```
-微信用户
+微信用户 / Discord / WhatsApp
   │
   ▼
-微信服务器
+渠道适配层
+  ├── 微信 (iLink Bot API — 官方协议)
+  ├── Discord (discord.js Bot)
+  └── WhatsApp (Baileys)
   │
-  ▼ (iLink Bot API — 微信官方协议)
-  │
+  ▼
 wechat-ai 网关
+  ├── 统一登录管理（多渠道扫码/Token）
   ├── 会话管理（per-user 独立上下文）
   ├── 消息聚合（防抖合并连续消息）
   ├── 中间件链（Koa 风格洋葱模型）
@@ -247,6 +289,8 @@ wechat-ai 网关
 | 语言 | TypeScript (ESM) |
 | 运行时 | Node.js 22+ |
 | 微信协议 | iLink Bot API（官方） |
+| Discord | discord.js |
+| WhatsApp | Baileys (Multi-Device) |
 | AI 接入 | Claude Agent SDK + [claw-agent-sdk](https://github.com/anxiong2025/claw-agent-sdk) |
 | 工具扩展 | Model Context Protocol (MCP) |
 | 构建 | tsup |
@@ -263,7 +307,9 @@ src/
 ├── asr.ts                    语音转文字 (Whisper)
 ├── tts.ts                    文字转语音 (OpenAI / Gemini)
 ├── channels/
-│   └── weixin.ts             微信 iLink 协议实现
+│   ├── weixin.ts             微信 iLink 协议实现
+│   ├── discord.ts            Discord Bot 渠道
+│   └── whatsapp.ts           WhatsApp 渠道 (Baileys)
 └── providers/
     ├── claude-agent.ts       Claude Agent SDK 接入
     ├── claw-agent.ts         claw-agent-sdk 接入（全模型 Agent）
@@ -306,7 +352,9 @@ await gw.start();
 - [x] 图片生成 (`/画`)
 - [x] 全模型 Agent 能力 (claw-agent-sdk)
 - [x] Web 管理面板 (多租户平台)
-- [ ] Telegram / Discord 渠道
+- [x] Discord 渠道
+- [x] WhatsApp 渠道
+- [ ] Telegram 渠道
 - [ ] 群聊支持
 
 ## 多租户平台模式 (v0.5.0+)

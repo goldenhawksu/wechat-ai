@@ -1,6 +1,6 @@
 {
   "name": "wechat-ai",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "description": "WeChat AI Bot — Bridge WeChat to Claude, Qwen, DeepSeek and more",
   "type": "module",
   "bin": {
@@ -41,13 +41,17 @@
     "gateway",
     "agent",
     "deepseek",
-    "qwen"
+    "qwen",
+    "discord",
+    "whatsapp"
   ],
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.81",
     "@modelcontextprotocol/sdk": "^1.27.1",
+    "@whiskeysockets/baileys": "^7.0.0-rc.9",
     "better-sqlite3": "^12.8.0",
     "claw-agent-sdk": "^0.1.0",
+    "discord.js": "^14.26.0",
     "express": "^5.2.1",
     "qrcode-terminal": "^0.12.0"
   },

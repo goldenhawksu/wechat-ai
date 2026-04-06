@@ -2,11 +2,17 @@ import { createLogger } from "../logger.js";
 import { getAccountsDir, ensureDir } from "../config.js";
 import { join } from "node:path";
 import { readFile, writeFile, unlink } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { randomBytes, randomUUID, createDecipheriv } from "node:crypto";
 import type { Channel, InboundMessage, OutboundMessage, ChannelConfig, MediaAttachment } from "../types.js";
 
 const log = createLogger("weixin");
+
+/** Mask sensitive IDs: "a859bd6ccf43@im.bot" → "a859****bot" */
+function maskId(id: string): string {
+  if (id.length <= 6) return id;
+  return id.slice(0, 4) + "****" + id.slice(-3);
+}
 
 const DEFAULT_BASE_URL = "https://ilinkai.weixin.qq.com";
 const CDN_BASE_URL = "https://novac2c.cdn.weixin.qq.com/c2c";
@@ -98,6 +104,30 @@ export class WeixinChannel implements Channel {
     this.config = config;
   }
 
+  // ── Session management ──
+
+  hasSession(): boolean {
+    return existsSync(this.accountFile());
+  }
+
+  sessionLabel(): string {
+    let id: string | undefined;
+    if (this.account) {
+      id = this.account.accountId;
+    } else {
+      try {
+        const raw = readFileSync(this.accountFile(), "utf-8");
+        id = JSON.parse(raw).accountId;
+      } catch {}
+    }
+    return id ? maskId(id) : "微信";
+  }
+
+  async clearSession(): Promise<void> {
+    await this.clearAccount();
+    this.account = null;
+  }
+
   // ── Auth ──
 
   async login(): Promise<void> {
@@ -160,7 +190,7 @@ export class WeixinChannel implements Channel {
         };
 
         await this.saveAccount();
-        log.info(`登录成功！账号: ${accountId.slice(0, 8)}...`);
+        log.info(`登录成功！账号: ${maskId(accountId)}`);
         return;
       }
 
@@ -187,16 +217,6 @@ export class WeixinChannel implements Channel {
       await this.loadAccount();
     }
 
-    // If we have a saved account and running interactively, ask whether to reuse it
-    if (this.account && !process.env.WAI_DAEMON) {
-      const reuse = await this.promptReuse();
-      if (!reuse) {
-        log.info("清除旧账号，重新扫码登录...");
-        await this.clearAccount();
-        this.account = null;
-      }
-    }
-
     if (!this.account) {
       log.info("首次使用，开始登录...");
       await this.login();
@@ -205,7 +225,7 @@ export class WeixinChannel implements Channel {
     await this.loadSyncBuf();
     await this.loadLastTokens();
     this.running = true;
-    log.info(`已上线 (${this.account!.accountId.slice(0, 8)}...)`);
+    log.info(`已上线 (${maskId(this.account!.accountId)})`);
 
     // Send startup greeting to known users (with saved tokens)
     // Fresh scan: no tokens, greeting + guide will be sent on first message
@@ -283,7 +303,7 @@ export class WeixinChannel implements Channel {
             const mediaInfo = content.media.length > 0
               ? ` +${content.media.map((m) => m.type).join(",")}`
               : "";
-            log.info(`收到消息 [${msg.from_user_id.slice(0, 8)}...]: ${content.text.slice(0, 50)}${mediaInfo}`);
+            log.info(`收到消息 [${maskId(msg.from_user_id)}]: ${content.text.slice(0, 50)}${mediaInfo}`);
             // Save context_token for startup greeting
             if (msg.context_token && msg.from_user_id) {
               this.lastTokens.set(msg.from_user_id, msg.context_token);
@@ -347,7 +367,7 @@ export class WeixinChannel implements Channel {
         base_info: { channel_version: CHANNEL_VERSION },
       }, { timeout: 10_000 });
 
-      log.debug(`已发送输入状态给 ${userId.slice(0, 8)}...`);
+      log.debug(`已发送输入状态给 ${maskId(userId)}`);
     } catch {
       // typing 失败不影响主流程
     }
@@ -391,7 +411,7 @@ export class WeixinChannel implements Channel {
       if (res.ret && res.ret !== 0) {
         log.error(`发送失败: ret=${res.ret} ${res.errmsg || JSON.stringify(res)}`);
       } else {
-        log.info(`文本已发送 (${chunk.length} 字符) → ${msg.targetId.slice(0, 8)}...`);
+        log.info(`文本已发送 (${chunk.length} 字符) → ${maskId(msg.targetId)}`);
       }
     }
   }
@@ -713,7 +733,7 @@ export class WeixinChannel implements Channel {
     try {
       const raw = await readFile(path, "utf-8");
       this.account = JSON.parse(raw);
-      log.debug(`已加载账号: ${this.account!.accountId.slice(0, 8)}...`);
+      log.debug(`已加载账号: ${maskId(this.account!.accountId)}`);
     } catch {
       log.warn("加载账号失败");
     }
@@ -734,86 +754,6 @@ export class WeixinChannel implements Channel {
     this.guideSentCache.clear();
   }
 
-  private promptReuse(): Promise<boolean> {
-    return new Promise((resolve) => {
-      const id = this.account!.accountId;
-      const display = id.length > 12 ? id.slice(0, 6) + "..." + id.slice(-4) : id;
-      const options = ["继续使用当前账号", "重新扫码登录"];
-      let selected = 0;
-
-      const render = () => {
-        // Move cursor up to redraw (except first render)
-        process.stdout.write(`\x1b[${options.length}A`);
-        for (let i = 0; i < options.length; i++) {
-          const num = `\x1b[2m${i + 1}.\x1b[0m`;
-          const prefix = i === selected ? "\x1b[36m❯\x1b[0m" : " ";
-          const text = i === selected ? `\x1b[1m${options[i]}\x1b[0m` : `\x1b[2m${options[i]}\x1b[0m`;
-          process.stdout.write(`\x1b[2K  ${prefix} ${num} ${text}\n`);
-        }
-      };
-
-      console.log(`\x1b[32m?\x1b[0m 检测到已登录账号 (${display})，请选择: \x1b[2m(输入数字 或 ↑↓选择)\x1b[0m`);
-      // Print initial placeholders
-      for (let i = 0; i < options.length; i++) {
-        console.log();
-      }
-      render();
-
-      if (!process.stdin.isTTY) {
-        // Non-interactive: default to reuse
-        resolve(true);
-        return;
-      }
-
-      try {
-        process.stdin.setRawMode(true);
-      } catch {
-        // Some Windows terminals (e.g. Git Bash MinTTY) don't support raw mode
-        resolve(true);
-        return;
-      }
-      process.stdin.resume();
-
-      const onData = (data: Buffer) => {
-        const key = data.toString();
-        if (key === "\x1b[A" || key === "k") {
-          // Up
-          selected = (selected - 1 + options.length) % options.length;
-          render();
-        } else if (key === "\x1b[B" || key === "j") {
-          // Down
-          selected = (selected + 1) % options.length;
-          render();
-        } else if (key === "1") {
-          selected = 0;
-          render();
-          cleanup();
-          resolve(true);
-        } else if (key === "2") {
-          selected = 1;
-          render();
-          cleanup();
-          resolve(false);
-        } else if (key === "\r" || key === "\n") {
-          // Enter
-          cleanup();
-          resolve(selected === 0);
-        } else if (key === "\x03") {
-          // Ctrl+C
-          cleanup();
-          process.exit(0);
-        }
-      };
-
-      const cleanup = () => {
-        process.stdin.removeListener("data", onData);
-        process.stdin.setRawMode(false);
-        process.stdin.pause();
-      };
-
-      process.stdin.on("data", onData);
-    });
-  }
 
   private async saveSyncBuf(): Promise<void> {
     await ensureDir(getAccountsDir());
@@ -895,12 +835,12 @@ export class WeixinChannel implements Channel {
           await this.send({ targetId: userId, text: this.getGuideText(), replyToken: token });
           guideSent.add(userId);
           await this.saveGuideSent(guideSent);
-          log.debug(`已发送指南给 ${userId.slice(0, 8)}...`);
+          log.debug(`已发送指南给 ${maskId(userId)}`);
         }
         this.guideSentCache.add(userId);
       }
     } catch {
-      log.warn(`发送问候/指南失败 ${userId.slice(0, 8)}...`);
+      log.warn(`发送问候/指南失败 ${maskId(userId)}`);
     }
   }
 
@@ -924,9 +864,9 @@ export class WeixinChannel implements Channel {
           guideSent.add(userId);
           this.guideSentCache.add(userId);
         }
-        log.debug(`已问候 ${userId.slice(0, 8)}...`);
+        log.debug(`已问候 ${maskId(userId)}`);
       } catch {
-        log.warn(`问候失败 ${userId.slice(0, 8)}... (token 可能过期)`);
+        log.warn(`问候失败 ${maskId(userId)} (token 可能过期)`);
       }
     }
 
