@@ -8,6 +8,7 @@ export interface PlatformRequest {
   headers: { [key: string]: string | string[] | undefined };
   body: Record<string, unknown>;
   params: Record<string, string>;
+  ip?: string;
 }
 
 export function authMiddleware(req: PlatformRequest, res: Response, next: NextFunction): void {
