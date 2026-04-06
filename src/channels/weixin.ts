@@ -91,6 +91,10 @@ export class WeixinChannel implements Channel {
   private running = false;
   private abortController: AbortController | null = null;
   private config: ChannelConfig;
+
+  // QR status for per-user bot instances
+  pendingQR: { url: string; status: string } | null = null;
+
   // Cache typing_ticket per user
   private typingTickets = new Map<string, string>();
   // Last known context_token per user (for startup greeting)
@@ -162,6 +166,9 @@ export class WeixinChannel implements Channel {
 
     log.info("等待扫码...");
 
+    // Expose QR for per-user bot polling
+    this.pendingQR = { url: qrUrl, status: "pending" };
+
     let attempts = 0;
     while (attempts < 60) {
       const statusRes = await this.api(
@@ -190,16 +197,19 @@ export class WeixinChannel implements Channel {
         };
 
         await this.saveAccount();
+        this.pendingQR = null;
         log.info(`登录成功！账号: ${maskId(accountId)}`);
         return;
       }
 
       if (status === "scaned") {
         log.info("已扫码，等待确认...");
+        if (this.pendingQR) this.pendingQR.status = "scanned";
       }
 
       if (status === "expired") {
         log.warn("二维码已过期");
+        this.pendingQR = { url: qrUrl, status: "expired" };
         throw new Error("二维码已过期");
       }
 

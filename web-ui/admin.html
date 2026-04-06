@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ClawBot 管理后台</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f7fa;
+      min-height: 100vh;
+    }
+    .header {
+      background: white;
+      padding: 16px 40px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .header h1 { color: #333; font-size: 20px; }
+    .header-actions { display: flex; gap: 12px; align-items: center; }
+    .header-actions input {
+      padding: 8px 12px;
+      border: 2px solid #eee;
+      border-radius: 8px;
+      font-size: 14px;
+      width: 200px;
+    }
+    .container { padding: 30px 40px; max-width: 1200px; margin: 0 auto; }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 24px;
+      background: white;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+    .tab {
+      padding: 14px 24px;
+      cursor: pointer;
+      border: none;
+      background: none;
+      font-size: 15px;
+      color: #666;
+      transition: all 0.2s;
+      border-bottom: 3px solid transparent;
+    }
+    .tab:hover { background: #f5f7fa; }
+    .tab.active { color: #667eea; border-bottom-color: #667eea; font-weight: 600; }
+
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    /* Card */
+    .card {
+      background: white;
+      padding: 24px;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+      margin-bottom: 20px;
+    }
+    .card h2 { margin-bottom: 16px; color: #333; font-size: 17px; }
+
+    /* Table */
+    table { width: 100%; border-collapse: collapse; }
+    th, td {
+      padding: 12px 16px;
+      text-align: left;
+      border-bottom: 1px solid #f0f0f0;
+      font-size: 14px;
+    }
+    th { color: #999; font-weight: 500; font-size: 13px; text-transform: uppercase; }
+    tr:hover td { background: #fafbfc; }
+
+    /* Buttons */
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: transform 0.1s;
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn-primary { background: linear-gradient(135deg, #667eea, #764ba2); color: white; }
+    .btn-danger { background: #fee; color: #e74c3c; }
+    .btn-sm { padding: 6px 12px; font-size: 13px; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    /* Badge */
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .badge-active { background: #d4edda; color: #155724; }
+    .badge-expired { background: #f8d7da; color: #721c24; }
+    .badge-revoked { background: #eee; color: #999; }
+    .badge-online { background: #d1ecf1; color: #0c5460; }
+
+    /* Toolbar */
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .toolbar .count { color: #999; font-size: 14px; }
+
+    /* Input group */
+    .input-group { display: flex; gap: 8px; align-items: center; }
+    .input-group input {
+      padding: 8px 12px;
+      border: 2px solid #eee;
+      border-radius: 8px;
+      font-size: 14px;
+      width: 120px;
+    }
+
+    /* Login overlay */
+    .login-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .login-box {
+      background: white;
+      padding: 40px;
+      border-radius: 16px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+      width: 400px;
+    }
+    .login-box h2 { text-align: center; margin-bottom: 24px; }
+    .login-box input {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #eee;
+      border-radius: 8px;
+      font-size: 16px;
+      margin-bottom: 16px;
+    }
+    .login-box button { width: 100%; }
+    .error { color: #e74c3c; text-align: center; margin-top: 12px; font-size: 14px; }
+
+    /* Stats */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .stat-card {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+      text-align: center;
+    }
+    .stat-value { font-size: 32px; font-weight: 700; color: #667eea; }
+    .stat-label { color: #999; font-size: 14px; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <!-- Login overlay -->
+  <div class="login-overlay" id="loginOverlay">
+    <div class="login-box">
+      <h2>ClawBot 管理后台</h2>
+      <input type="password" id="adminSecret" placeholder="请输入管理密码" autofocus>
+      <button class="btn btn-primary" onclick="doLogin()">进入管理</button>
+      <div class="error" id="loginError"></div>
+    </div>
+  </div>
+
+  <!-- Main UI -->
+  <div id="mainUI" style="display:none;">
+    <div class="header">
+      <h1>ClawBot 管理后台</h1>
+      <div class="header-actions">
+        <span style="color:#999;font-size:14px;">密码已保存</span>
+        <button class="btn btn-danger btn-sm" onclick="doLogout()">退出</button>
+      </div>
+    </div>
+
+    <div class="container">
+      <!-- Stats -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-value" id="statInvites">-</div>
+          <div class="stat-label">邀请码总数</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="statUsers">-</div>
+          <div class="stat-label">注册用户</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="statBots">-</div>
+          <div class="stat-label">在线 Bot</div>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <button class="tab active" onclick="switchTab('invites')">邀请码</button>
+        <button class="tab" onclick="switchTab('users')">用户管理</button>
+      </div>
+
+      <!-- Invites Panel -->
+      <div class="panel active" id="panel-invites">
+        <div class="card">
+          <div class="toolbar">
+            <h2 style="margin:0;">邀请码管理</h2>
+            <div class="input-group">
+              <input type="number" id="maxUses" value="1" min="0" placeholder="次数">
+              <button class="btn btn-primary btn-sm" onclick="createInvite()">生成邀请码</button>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>邀请码</th>
+                <th>状态</th>
+                <th>已用 / 上限</th>
+                <th>创建时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="inviteTable"></tbody>
+          </table>
+          <div class="toolbar" style="margin-top:12px;">
+            <span class="count" id="inviteCount"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Users Panel -->
+      <div class="panel" id="panel-users">
+        <div class="card">
+          <h2>用户列表</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>用户 ID</th>
+                <th>Bot 状态</th>
+                <th>微信 ID</th>
+                <th>用户状态</th>
+                <th>过期时间</th>
+                <th>注册时间</th>
+              </tr>
+            </thead>
+            <tbody id="userTable"></tbody>
+          </table>
+          <div class="toolbar" style="margin-top:12px;">
+            <span class="count" id="userCount"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const SECRET_KEY = 'wai_admin_secret';
+
+    function getHeaders() {
+      return {
+        'Content-Type': 'application/json',
+        'X-Admin-Secret': localStorage.getItem(SECRET_KEY) || ''
+      };
+    }
+
+    // ── Login ──
+    function doLogin() {
+      const secret = document.getElementById('adminSecret').value;
+      if (!secret) return;
+      localStorage.setItem(SECRET_KEY, secret);
+      fetch('/api/admin/invites', { headers: getHeaders() })
+        .then(r => {
+          if (r.ok) {
+            document.getElementById('loginOverlay').style.display = 'none';
+            document.getElementById('mainUI').style.display = 'block';
+            loadAll();
+          } else {
+            localStorage.removeItem(SECRET_KEY);
+            document.getElementById('loginError').textContent = '密码错误';
+          }
+        })
+        .catch(() => {
+          document.getElementById('loginError').textContent = '连接失败';
+        });
+    }
+
+    function doLogout() {
+      localStorage.removeItem(SECRET_KEY);
+      location.reload();
+    }
+
+    // Auto-login if saved
+    (function() {
+      const saved = localStorage.getItem(SECRET_KEY);
+      if (saved) {
+        fetch('/api/admin/invites', { headers: getHeaders() })
+          .then(r => {
+            if (r.ok) {
+              document.getElementById('loginOverlay').style.display = 'none';
+              document.getElementById('mainUI').style.display = 'block';
+              loadAll();
+            }
+          });
+      }
+      document.getElementById('adminSecret').addEventListener('keydown', e => {
+        if (e.key === 'Enter') doLogin();
+      });
+    })();
+
+    // ── Tabs ──
+    function switchTab(name) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      document.getElementById('panel-' + name).classList.add('active');
+      event.target.classList.add('active');
+    }
+
+    // ── Load all data ──
+    function loadAll() {
+      loadInvites();
+      loadUsers();
+    }
+
+    // ── Invite Codes ──
+    function loadInvites() {
+      fetch('/api/admin/invites', { headers: getHeaders() })
+        .then(r => r.json())
+        .then(codes => {
+          const tbody = document.getElementById('inviteTable');
+          tbody.innerHTML = '';
+          let activeCount = 0;
+
+          codes.forEach(c => {
+            const isActive = c.isActive && (!c.expiresAt || c.expiresAt > Date.now());
+            if (isActive) activeCount++;
+
+            const statusBadge = !c.isActive
+              ? '<span class="badge badge-revoked">已撤销</span>'
+              : isActive
+                ? '<span class="badge badge-active">有效</span>'
+                : '<span class="badge badge-expired">已过期</span>';
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td><code style="font-size:15px;letter-spacing:1px;">${c.code}</code></td>
+              <td>${statusBadge}</td>
+              <td>${c.useCount} / ${c.maxUses > 0 ? c.maxUses : '∞'}</td>
+              <td>${new Date(c.createdAt).toLocaleString()}</td>
+              <td>${isActive ? '<button class="btn btn-danger btn-sm" onclick="revokeInvite(\'' + c.code + '\')">撤销</button>' : ''}</td>
+            `;
+            tbody.appendChild(tr);
+          });
+
+          document.getElementById('inviteCount').textContent = '共 ' + codes.length + ' 个邀请码，' + activeCount + ' 个有效';
+          document.getElementById('statInvites').textContent = activeCount;
+        });
+    }
+
+    function createInvite() {
+      const maxUses = parseInt(document.getElementById('maxUses').value) || 0;
+      fetch('/api/admin/invite', {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ maxUses })
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.success) {
+            loadInvites();
+          } else {
+            alert(data.error || '创建失败');
+          }
+        });
+    }
+
+    function revokeInvite(code) {
+      if (!confirm('确认撤销邀请码 ' + code + '？')) return;
+      fetch('/api/admin/invite/' + code, {
+        method: 'DELETE',
+        headers: getHeaders()
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.success) loadInvites();
+          else alert(data.error || '撤销失败');
+        });
+    }
+
+    // ── Users ──
+    function loadUsers() {
+      fetch('/api/admin/users', { headers: getHeaders() })
+        .then(r => r.json())
+        .then(users => {
+          const tbody = document.getElementById('userTable');
+          tbody.innerHTML = '';
+          let onlineCount = 0;
+
+          users.forEach(u => {
+            const isExpired = u.expiresAt && u.expiresAt < Date.now();
+            const statusBadge = u.isActive && !isExpired
+              ? '<span class="badge badge-active">活跃</span>'
+              : '<span class="badge badge-expired">已过期</span>';
+
+            const botBadge = u.botOnline
+              ? '<span class="badge badge-online">在线</span>'
+              : '<span style="color:#999;">离线</span>';
+            if (u.botOnline) onlineCount++;
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td><code style="font-size:12px;">${u.id.slice(0, 8)}...</code></td>
+              <td>${botBadge}</td>
+              <td>${u.wechatId || '-'}</td>
+              <td>${statusBadge}</td>
+              <td>${u.expiresAt ? new Date(u.expiresAt).toLocaleString() : '-'}</td>
+              <td>${new Date(u.createdAt).toLocaleString()}</td>
+            `;
+            tbody.appendChild(tr);
+          });
+
+          document.getElementById('userCount').textContent = '共 ' + users.length + ' 个用户';
+          document.getElementById('statUsers').textContent = users.length;
+          document.getElementById('statBots').textContent = onlineCount;
+        });
+    }
+
+    // Auto-refresh every 30s
+    setInterval(() => {
+      if (document.getElementById('mainUI').style.display !== 'none') {
+        loadInvites();
+        loadUsers();
+      }
+    }, 30000);
+  </script>
+</body>
+</html>
