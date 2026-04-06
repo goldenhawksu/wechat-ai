@@ -2,7 +2,7 @@ import { z } from "zod";
 import { Response, NextFunction } from "express";
 import type { PlatformRequest } from "./auth.js";
 
-// ============ Validation Schemas ============
+// ============ Validation schemas = -----------
 
 // 注册验证
 export const registerSchema = z.object({
@@ -34,7 +34,7 @@ export const updateConfigSchema = z.object({
   systemPrompt: z.string().max(4096).optional(),
 });
 
-// ============ Validation middleware factories ============
+// ============ Validation middleware factories = -----------
 
 // Body validation
 export function validate(schema: z.ZodSchema) {
@@ -45,13 +45,13 @@ export function validate(schema: z.ZodSchema) {
         error: "输入验证失败",
         details: result.error.issues.map(i => ({
           field: i.path.join("."),
-          message: i.message,
+          message: i.message
         }))
       });
       return;
     }
-    // Replace body with validated data
-    req.body = result.data;
+    // Replace params with validated data
+    req.body = result.data as Record<string, unknown>;
     next();
   };
 }
@@ -66,7 +66,7 @@ export function validateParams(schema: z.ZodSchema) {
         details: result.error.issues.map(i => ({
           field: i.path.join("."),
           message: i.message
-        })
+        }))
       });
       return;
     }
