@@ -1,7 +1,17 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import type { Request, Response } from "express";
 import { authMiddleware, adminAuthMiddleware, type PlatformRequest } from "../../src/web/middleware/auth.js";
 import { signToken, verifyToken, extractBearerToken } from "../../src/web/middleware/jwt.js";
+
+// Mock the user store
+vi.mock("../../src/storage/user-store.js", () => ({
+  getUser: vi.fn((userId: string) => ({
+    id: userId,
+    inviteCode: "TEST1234",
+    createdAt: Date.now(),
+    expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
+  })),
+}));
 
 describe("JWT Authentication", () => {
   describe("signToken / verifyToken", () => {

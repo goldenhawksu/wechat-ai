@@ -50,10 +50,8 @@ describe("Input Validation Schemas", () => {
 
   it("should reject config with too long systemPrompt", () => {
     const result = updateConfigSchema.safeParse({
-      systemPrompt: "A".repeat(2048). "A".repeat(2048). "a".repeat(2048). "a".repeat(2048). "a"
-    },
+      systemPrompt: "A".repeat(5000)
     });
     expect(result.success).toBe(false);
-    expect(result.error).toBeDefined();
   });
 });
