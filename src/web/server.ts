@@ -8,6 +8,11 @@ import type { PlatformRequest } from "./middleware/auth.js";
 
 const log = createLogger("web-server");
 
+// 从环境变量获取允许的源，默认只允许同源
+const ALLOWED_ORIGINS = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(",").map(s => s.trim())
+  : [];  // 空数组表示只允许同源请求
+
 export function createWebServer(port: number = 3000): Express {
   const app = express();
 
@@ -21,12 +26,29 @@ export function createWebServer(port: number = 3000): Express {
     next();
   });
 
-  // CORS for development
-  app.use((_req, res, next) => {
-    res.header("Access-Control-Allow-Origin", "*");
+  // CORS with origin whitelist
+  app.use((req, res, next) => {
+    const origin = req.headers.origin as string | undefined;
+
+    // 如果没有 origin (同源请求) 或在白名单中，允许
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+      res.header("Access-Control-Allow-Origin", origin || "*");
+      res.header("Access-Control-Allow-Credentials", "true");
+    } else {
+      // 不在白名单的跨域请求，拒绝
+      log.warn(`CORS rejected origin: ${origin}`);
+      res.status(403).json({ error: "Origin not allowed" });
+      return;
+    }
+
     res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE");
-    res.header("Access-Control-Allow-Headers", "Content-Type, X-User-Id");
+    res.header("Access-Control-Allow-Headers", "Content-Type");
     next();
+  });
+
+  // Handle preflight
+  app.options("*", (_req, res) => {
+    res.status(204).end();
   });
 
   // Routes
