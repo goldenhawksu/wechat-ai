@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ClawBot 平台 - 控制台</title>
+  <title>CTS ClawBot 平台 - 控制台</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -19,7 +19,7 @@
       justify-content: space-between;
       align-items: center;
     }
-    .header h1 { color: #333; }
+    .header h1 { color: #333; font-size: 22px; }
     .header button {
       padding: 10px 20px;
       background: #e74c3c;
@@ -27,6 +27,7 @@
       border: none;
       border-radius: 8px;
       cursor: pointer;
+      font-size: 14px;
     }
     .container { padding: 40px; max-width: 1200px; margin: 0 auto; }
     .card {
@@ -38,7 +39,7 @@
     }
     .card h2 { margin-bottom: 20px; color: #333; }
     .form-group { margin-bottom: 20px; }
-    label { display: block; margin-bottom: 8px; color: #666; }
+    label { display: block; margin-bottom: 8px; color: #666; font-size: 14px; }
     input, select {
       width: 100%;
       padding: 12px;
@@ -46,31 +47,104 @@
       border-radius: 8px;
       font-size: 14px;
     }
-    button {
+    input:focus, select:focus { border-color: #667eea; outline: none; }
+    .btn {
       padding: 12px 24px;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
       border: none;
       border-radius: 8px;
       cursor: pointer;
+      font-size: 14px;
     }
+    .btn:hover { opacity: 0.9; }
+    .btn-danger {
+      background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+    }
+    .btn-success {
+      background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .status { padding: 10px 20px; border-radius: 8px; margin-bottom: 20px; }
     .status.active { background: #d4edda; color: #155724; }
     .status.expired { background: #f8d7da; color: #721c24; }
+    .status.pending { background: #fff3cd; color: #856404; }
+
+    /* QR Binding Section */
+    .qr-section { text-align: center; }
+    .qr-image {
+      max-width: 280px;
+      margin: 20px auto;
+      border: 2px solid #eee;
+      border-radius: 12px;
+      padding: 15px;
+    }
+    .qr-image canvas { width: 100%; max-width: 250px; }
+    .qr-status {
+      font-size: 16px;
+      padding: 10px;
+      margin: 10px 0;
+    }
+    .qr-status.waiting { color: #856404; }
+    .qr-status.scanned { color: #2980b9; }
+    .qr-status.online { color: #27ae60; }
+    .qr-status.error { color: #e74c3c; }
+    .binding-steps {
+      text-align: left;
+      margin: 20px auto;
+      max-width: 400px;
+    }
+    .binding-steps p {
+      padding: 8px 0;
+      color: #555;
+      font-size: 14px;
+    }
+    .binding-steps .step-num {
+      display: inline-block;
+      width: 24px;
+      height: 24px;
+      line-height: 24px;
+      text-align: center;
+      background: #667eea;
+      color: white;
+      border-radius: 50%;
+      font-size: 12px;
+      margin-right: 10px;
+    }
   </style>
 </head>
 <body>
   <div class="header">
-    <h1>🤖 ClawBot 控制台</h1>
+    <h1>🤖 CTS ClawBot 控制台</h1>
     <button onclick="logout()">退出</button>
   </div>
 
   <div class="container">
+    <!-- Account Status -->
     <div class="card">
       <h2>账户状态</h2>
       <div id="status" class="status">加载中...</div>
     </div>
 
+    <!-- WeChat Binding -->
+    <div class="card qr-section">
+      <h2>微信绑定</h2>
+      <div id="qrArea">
+        <div class="binding-steps">
+          <p><span class="step-num">1</span>点击下方按钮启动您的专属 Bot</p>
+          <p><span class="step-num">2</span>用微信扫描生成的二维码</p>
+          <p><span class="step-num">3</span>扫码成功后即可在微信中与 Bot 对话</p>
+        </div>
+        <button class="btn btn-success" id="btnStart" onclick="startBot()">启动 Bot</button>
+        <button class="btn btn-danger" id="btnStop" onclick="stopBot()" style="display:none">停止 Bot</button>
+      </div>
+      <div id="qrStatus" class="qr-status" style="display:none"></div>
+      <div id="qrImage" class="qr-image" style="display:none">
+        <img id="qrImg" src="" alt="QR Code" style="max-width:250px;">
+      </div>
+    </div>
+
+    <!-- API Config -->
     <div class="card">
       <h2>API 配置</h2>
       <div class="form-group">
@@ -92,85 +166,209 @@
         <label>Base URL (可选)</label>
         <input type="text" id="baseUrl" placeholder="https://api.example.com/v1">
       </div>
-      <button onclick="saveConfig()">保存配置</button>
+      <button class="btn" onclick="saveConfig()">保存配置</button>
     </div>
 
+    <!-- Usage -->
     <div class="card">
       <h2>使用说明</h2>
-      <p>1. 配置您的 API Key</p>
-      <p>2. 在微信中找到"微信ClawBot"</p>
-      <p>3. 发送消息开始对话</p>
-      <p style="margin-top: 20px; color: #e74c3c;">会话有效期: 7天 (到期后需重新扫码激活)</p>
+      <p style="line-height: 1.8; color: #555;">
+        1. 配置您的 API Key 和模型<br>
+        2. 启动 Bot 并用微信扫码绑定<br>
+        3. 在微信中发送消息即可开始对话
+      </p>
+      <p style="margin-top: 15px; color: #999; font-size: 13px;">会话有效期: 7天</p>
     </div>
   </div>
 
   <script>
-    const userId = localStorage.getItem('userId');
-    if (!userId) window.location.href = '/login.html';
+    const token = localStorage.getItem('token');
+    if (!token) window.location.href = '/login.html';
 
-    // Load status
+    function authHeaders() {
+      return { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+    }
+
+    let pollTimer = null;
+
+    // ── Account Status ──
     async function loadStatus() {
-      const res = await fetch(`/api/auth/me`, {
-        headers: { 'X-User-Id': userId }
-      });
-      const data = await res.json();
+      try {
+        const res = await fetch('/api/auth/me', { headers: authHeaders() });
+        const data = await res.json();
+        const statusDiv = document.getElementById('status');
 
-      const statusDiv = document.getElementById('status');
-      if (data.loggedIn) {
-        const expires = new Date(data.expiresAt).toLocaleString();
-        statusDiv.className = 'status active';
-        statusDiv.innerHTML = `✓ 已登录 | 过期时间: ${expires}`;
-      } else {
-        statusDiv.className = 'status expired';
-        statusDiv.innerHTML = `⚠ 会话已过期，请重新扫码激活`;
+        if (data.loggedIn) {
+          const expires = new Date(data.expiresAt).toLocaleString();
+          statusDiv.className = 'status active';
+          statusDiv.innerHTML = `✓ 已登录 | 过期时间: ${expires}`;
+        } else {
+          statusDiv.className = 'status expired';
+          statusDiv.innerHTML = `⚠ 登录已过期，请重新登录`;
+          setTimeout(() => window.location.href = '/login.html', 2000);
+        }
+      } catch {
+        document.getElementById('status').innerHTML = '⚠ 网络错误';
       }
     }
 
-    // Load config
+    // ── Config ──
     async function loadConfig() {
-      const res = await fetch(`/api/config`, {
-        headers: { 'X-User-Id': userId }
-      });
-      const data = await res.json();
-
-      if (data.defaultProvider) {
-        document.getElementById('provider').value = data.defaultProvider;
-      }
+      try {
+        const res = await fetch('/api/config', { headers: authHeaders() });
+        const data = await res.json();
+        if (data.defaultProvider) {
+          document.getElementById('provider').value = data.defaultProvider;
+        }
+      } catch {}
     }
 
-    // Save config
     async function saveConfig() {
       const provider = document.getElementById('provider').value;
       const apiKey = document.getElementById('apiKey').value;
       const baseUrl = document.getElementById('baseUrl').value;
 
-      const res = await fetch(`/api/config/provider/${provider}/key`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-Id': userId
-        },
-        body: JSON.stringify({ apiKey, baseUrl: baseUrl || undefined })
-      });
-
-      const data = await res.json();
-      alert(data.success ? '保存成功' : data.error);
+      try {
+        const res = await fetch(`/api/config/provider/${provider}/key`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ apiKey, baseUrl: baseUrl || undefined })
+        });
+        const data = await res.json();
+        alert(data.success ? '✓ 保存成功' : (data.error || '保存失败'));
+      } catch {
+        alert('网络错误');
+      }
     }
 
-    // Show/hide base URL
     document.getElementById('provider').addEventListener('change', (e) => {
       document.getElementById('baseUrlGroup').style.display =
         e.target.value === 'custom' ? 'block' : 'none';
     });
 
-    // Logout
+    // ── Bot Management ──
+    async function startBot() {
+      const btn = document.getElementById('btnStart');
+      btn.disabled = true;
+      btn.textContent = '启动中...';
+
+      try {
+        const res = await fetch('/api/bot/start', {
+          method: 'POST',
+          headers: authHeaders()
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+          startPolling();
+        } else {
+          alert(data.error || '启动失败');
+          btn.disabled = false;
+          btn.textContent = '启动 Bot';
+        }
+      } catch {
+        alert('网络错误');
+        btn.disabled = false;
+        btn.textContent = '启动 Bot';
+      }
+    }
+
+    async function stopBot() {
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+
+      try {
+        await fetch('/api/bot/stop', {
+          method: 'POST',
+          headers: authHeaders()
+        });
+      } catch {}
+
+      resetQrUI();
+    }
+
+    function startPolling() {
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = setInterval(pollStatus, 2000);
+      pollStatus(); // immediate first check
+    }
+
+    async function pollStatus() {
+      try {
+        const res = await fetch('/api/bot/status', { headers: authHeaders() });
+        const data = await res.json();
+        updateQrUI(data);
+      } catch {}
+    }
+
+    function updateQrUI(data) {
+      const qrStatus = document.getElementById('qrStatus');
+      const qrImage = document.getElementById('qrImage');
+      const qrImg = document.getElementById('qrImg');
+      const btnStart = document.getElementById('btnStart');
+      const btnStop = document.getElementById('btnStop');
+
+      qrStatus.style.display = 'block';
+
+      if (!data.running || data.status === 'offline') {
+        resetQrUI();
+        return;
+      }
+
+      if (data.status === 'pending') {
+        if (data.qrImage) {
+          qrImage.style.display = 'block';
+          qrImg.src = data.qrImage;
+        }
+        qrStatus.className = 'qr-status waiting';
+        qrStatus.textContent = '📱 请用微信扫描二维码';
+        btnStart.style.display = 'none';
+        btnStop.style.display = 'inline-block';
+      } else if (data.status === 'scanned') {
+        qrStatus.className = 'qr-status scanned';
+        qrStatus.textContent = '✅ 已扫码，等待确认...';
+      } else if (data.status === 'online') {
+        qrStatus.className = 'qr-status online';
+        qrStatus.textContent = '🟢 Bot 在线 — 可以在微信中发送消息了！';
+        qrImage.style.display = 'none';
+        btnStop.style.display = 'inline-block';
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      } else if (data.status === 'expired') {
+        qrStatus.className = 'qr-status error';
+        qrStatus.textContent = '⏰ 二维码已过期，请重新启动';
+        qrImage.style.display = 'none';
+        btnStart.style.display = 'inline-block';
+        btnStart.disabled = false;
+        btnStart.textContent = '重新启动 Bot';
+        btnStop.style.display = 'none';
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      } else if (data.status === 'starting') {
+        qrStatus.className = 'qr-status waiting';
+        qrStatus.textContent = '⏳ 正在生成二维码...';
+      }
+    }
+
+    function resetQrUI() {
+      document.getElementById('qrStatus').style.display = 'none';
+      document.getElementById('qrImage').style.display = 'none';
+      const btnStart = document.getElementById('btnStart');
+      btnStart.style.display = 'inline-block';
+      btnStart.disabled = false;
+      btnStart.textContent = '启动 Bot';
+      document.getElementById('btnStop').style.display = 'none';
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    }
+
     function logout() {
+      localStorage.removeItem('token');
       localStorage.removeItem('userId');
       window.location.href = '/login.html';
     }
 
+    // ── Init ──
     loadStatus();
     loadConfig();
+    // Check if bot is already running
+    pollStatus();
   </script>
 </body>
 </html>

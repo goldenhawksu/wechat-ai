@@ -28,7 +28,7 @@ router.get("/status", async (req: PlatformRequest, res: Response) => {
   const botManager = getBotManager();
 
   try {
-    const status = botManager.getBotStatus(userId);
+    const status = await botManager.getBotStatus(userId);
     res.json(status);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

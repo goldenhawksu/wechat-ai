@@ -44,6 +44,25 @@ export function getUser(id: string): PlatformUser | null {
   };
 }
 
+export function getUserByInviteCode(inviteCode: string): PlatformUser | null {
+  const db = getDatabase();
+  const stmt = db.prepare("SELECT * FROM users WHERE invite_code = ?");
+  const row = stmt.get(inviteCode) as Record<string, unknown> | undefined;
+
+  if (!row) return null;
+
+  return {
+    id: row.id as string,
+    wechatId: row.wechat_id as string | undefined,
+    name: row.name as string | undefined,
+    inviteCode: row.invite_code as string,
+    createdAt: row.created_at as number,
+    lastActiveAt: row.last_active_at as number,
+    expiresAt: row.expires_at as number,
+    isActive: row.is_active === 1,
+  };
+}
+
 export function getUserByWechatId(wechatId: string): PlatformUser | null {
   const db = getDatabase();
   const stmt = db.prepare("SELECT * FROM users WHERE wechat_id = ?");

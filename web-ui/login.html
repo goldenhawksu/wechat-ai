@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ClawBot 平台 - 登录</title>
+  <title>CTS ClawBot 平台 - 登录</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -51,7 +51,7 @@
 </head>
 <body>
   <div class="container">
-    <h1>🤖 ClawBot 平台</h1>
+    <h1>🤖 CTS ClawBot 平台</h1>
     <form id="loginForm">
       <div class="form-group">
         <label for="inviteCode">邀请码</label>
@@ -63,6 +63,24 @@
   </div>
 
   <script>
+    // Auto-login: if we already have a valid token, go to dashboard
+    (async function checkExisting() {
+      const existingToken = localStorage.getItem('token');
+      if (existingToken) {
+        try {
+          const res = await fetch('/api/auth/me', {
+            headers: { 'Authorization': `Bearer ${existingToken}` }
+          });
+          const data = await res.json();
+          if (data.loggedIn) {
+            window.location.href = '/dashboard.html';
+            return;
+          }
+        } catch {}
+        localStorage.removeItem('token');
+      }
+    })();
+
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const inviteCode = document.getElementById('inviteCode').value.toUpperCase();
@@ -79,6 +97,7 @@
 
         if (data.success) {
           localStorage.setItem('userId', data.userId);
+          localStorage.setItem('token', data.token);
           messageDiv.innerHTML = `<p class="success">${data.message}</p>`;
           setTimeout(() => window.location.href = '/dashboard.html', 1000);
         } else {

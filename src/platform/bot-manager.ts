@@ -3,6 +3,7 @@ import { WeixinChannel } from "../channels/weixin.js";
 import { getUserConfig, createDefaultUserConfig } from "../storage/user-store.js";
 import { getAgentPool } from "./agent-pool.js";
 import type { InboundMessage } from "../types.js";
+import QRCode from "qrcode";
 
 const log = createLogger("bot-manager");
 
@@ -11,6 +12,7 @@ interface RunningBot {
   channel: WeixinChannel;
   lastActivity: number;
   cleanupTimer: ReturnType<typeof setTimeout>;
+  loginComplete: boolean; // true once login() finishes (QR scanned or account loaded)
 }
 
 const MAX_BOTS = 10;
@@ -28,10 +30,15 @@ export class BotManager {
     const existing = this.bots.get(userId);
     if (existing) {
       const qr = existing.channel.pendingQR;
-      if (qr) {
+      if (qr && qr.status !== "expired") {
         return { status: "pending", message: "等待扫码" };
       }
-      return { status: "online", message: "Bot 已在线" };
+      if (!qr) {
+        return { status: "online", message: "Bot 已在线" };
+      }
+      // QR expired — stop old bot and create a fresh one
+      log.info(`QR expired for user ${userId.slice(0, 8)}..., restarting`);
+      await this.stopBot(userId);
     }
 
     // Check capacity
@@ -65,6 +72,7 @@ export class BotManager {
       channel,
       lastActivity: Date.now(),
       cleanupTimer,
+      loginComplete: false,
     });
 
     // Start the channel in background.
@@ -72,9 +80,18 @@ export class BotManager {
     // then runs the message loop. All of this is async and non-blocking for us.
     channel.start((msg: InboundMessage) => {
       this.handleMessage(userId, msg);
+    }).then(() => {
+      const bot = this.bots.get(userId);
+      if (bot && bot.channel === channel) {
+        bot.loginComplete = true;
+      }
     }).catch(err => {
       const msg = err instanceof Error ? err.message : String(err);
       log.error(`Bot error for user ${userId.slice(0, 8)}...: ${msg}`);
+      // Mark QR as expired so UI shows restart button
+      if (channel.pendingQR && channel.pendingQR.status !== "expired") {
+        channel.pendingQR.status = "expired";
+      }
     });
 
     return { status: "starting", message: "Bot 启动中，正在生成二维码..." };
@@ -83,12 +100,13 @@ export class BotManager {
   /**
    * Get bot status for a user
    */
-  getBotStatus(userId: string): {
+  async getBotStatus(userId: string): Promise<{
     running: boolean;
     status: "offline" | "starting" | "pending" | "scanned" | "online" | "expired" | "error";
     qrUrl?: string;
+    qrImage?: string;
     message: string;
-  } {
+  }> {
     const bot = this.bots.get(userId);
     if (!bot) {
       return { running: false, status: "offline", message: "Bot 未启动" };
@@ -96,10 +114,23 @@ export class BotManager {
 
     const qr = bot.channel.pendingQR;
     if (qr) {
+      let qrImage: string | undefined;
+      if (qr.url && qr.status === "pending") {
+        try {
+          qrImage = await QRCode.toDataURL(qr.url, {
+            width: 250,
+            margin: 2,
+            color: { dark: "#000000", light: "#ffffff" },
+          });
+        } catch (err) {
+          log.warn(`Failed to generate QR image: ${err}`);
+        }
+      }
       return {
         running: true,
         status: qr.status as "pending" | "scanned" | "expired",
         qrUrl: qr.url,
+        qrImage,
         message: qr.status === "pending"
           ? "等待扫码"
           : qr.status === "scanned"
@@ -110,8 +141,11 @@ export class BotManager {
       };
     }
 
-    // No pendingQR means login completed and bot is online
-    return { running: true, status: "online", message: "Bot 在线" };
+    // No pendingQR — check if login completed (bot online) or still starting
+    if (bot.loginComplete) {
+      return { running: true, status: "online", message: "Bot 在线" };
+    }
+    return { running: true, status: "starting", message: "正在启动..." };
   }
 
   /**

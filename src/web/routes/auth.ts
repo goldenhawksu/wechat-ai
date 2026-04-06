@@ -1,18 +1,18 @@
 import { Router, Response } from "express";
 import { getSessionManager } from "../../platform/session-manager.js";
-import { getInviteCode } from "../../storage/user-store.js";
+import { getInviteCode, useInviteCode, getUserByInviteCode, extendUserSession, isUserExpired } from "../../storage/user-store.js";
 import type { PlatformRequest } from "../middleware/auth.js";
 import { validate, registerSchema } from "../middleware/validate.js";
+import { signToken, verifyToken, extractBearerToken } from "../middleware/jwt.js";
 import { auditRegister, auditLogin, auditLogout } from "../middleware/audit.js";
 
 const router = Router();
 
-// Register with invite code - with validation
-router.post("/register", validate(registerSchema), async (req: PlatformRequest, res: Response) => {
+// Register or re-login with invite code
+router.post("/register", validate(registerSchema), (req: PlatformRequest, res: Response) => {
   const inviteCode = req.body.inviteCode as string;
 
   if (!inviteCode) {
-    auditRegister(req, false, "missing_invite_code");
     res.status(400).json({ error: "请提供邀请码" });
     return;
   }
@@ -20,50 +20,86 @@ router.post("/register", validate(registerSchema), async (req: PlatformRequest, 
   // Check invite code validity
   const invite = getInviteCode(inviteCode);
   if (!invite || !invite.isActive) {
-    auditRegister(req, false, "invalid_invite_code");
     res.status(400).json({ error: "无效的邀请码" });
     return;
   }
 
   if (invite.maxUses > 0 && invite.useCount >= invite.maxUses) {
-    auditRegister(req, false, "invite_code_exhausted");
     res.status(400).json({ error: "邀请码已用完" });
     return;
   }
 
-  const sessionManager = getSessionManager();
-  const result = await sessionManager.registerUser(inviteCode);
+  // Check if this invite code already has a user (re-login)
+  const existingUser = getUserByInviteCode(inviteCode);
 
-  if (result.success) {
-    // Set session
-    req.session = { userId: result.userId };
-    auditRegister(req, true);
+  if (existingUser) {
+    const expired = isUserExpired(existingUser.id);
+
+    if (expired) {
+      // Session expired: consume one use to extend
+      if (!useInviteCode(inviteCode)) {
+        res.status(400).json({ error: "邀请码使用失败" });
+        return;
+      }
+      extendUserSession(existingUser.id);
+    }
+    // Not expired: just issue new JWT, no use consumed
+
+    const token = signToken(existingUser.id);
+    auditLogin(req, true);
     res.json({
       success: true,
-      userId: result.userId,
-      message: "注册成功，请扫码绑定微信"
+      userId: existingUser.id,
+      token,
+      message: expired ? "登录成功，会话已续期" : "登录成功",
     });
-  } else {
-    auditRegister(req, false, result.error);
-    res.status(400).json({ error: result.error });
+    return;
   }
+
+  // New registration — registerUser internally calls useInviteCode
+  const sessionManager = getSessionManager();
+  sessionManager.registerUser(inviteCode).then((result) => {
+    if (result.success && result.userId) {
+      const token = signToken(result.userId);
+      auditRegister(req, true);
+      res.json({
+        success: true,
+        userId: result.userId,
+        token,
+        message: "注册成功，请扫码绑定微信"
+      });
+    } else {
+      auditRegister(req, false, result.error);
+      res.status(400).json({ error: result.error });
+    }
+  }).catch((err) => {
+    auditRegister(req, false, String(err));
+    res.status(500).json({ error: "注册失败" });
+  });
 });
 
-// Login check
-router.get("/me", async (req: PlatformRequest, res: Response) => {
-  const userId = req.session?.userId;  // 仅从 session 获取
+// Login check — reads JWT from Authorization header
+router.get("/me", (req: PlatformRequest, res: Response) => {
+  const token = extractBearerToken(req.headers["authorization"] as string | undefined);
 
-  if (!userId) {
+  if (!token) {
+    res.json({ loggedIn: false });
+    return;
+  }
+
+  const payload = verifyToken(token);
+  if (!payload) {
     res.json({ loggedIn: false });
     return;
   }
 
   const sessionManager = getSessionManager();
-  const status = sessionManager.getUserStatus(userId);
+  const status = sessionManager.getUserStatus(payload.userId);
   const loggedIn = status.exists && !status.isExpired;
-  auditLogin(req, loggedIn, loggedIn ? undefined : "session_invalid");
+  auditLogin(req, loggedIn, loggedIn ? undefined : "token_invalid");
   res.json({
     loggedIn,
+    userId: payload.userId,
     ...status,
   });
 });
@@ -71,7 +107,6 @@ router.get("/me", async (req: PlatformRequest, res: Response) => {
 // Logout
 router.post("/logout", (req: PlatformRequest, res: Response) => {
   auditLogout(req);
-  req.session = undefined;
   res.json({ success: true });
 });
 

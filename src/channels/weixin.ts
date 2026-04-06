@@ -724,12 +724,18 @@ export class WeixinChannel implements Channel {
 
   // ── Persistence ──
 
+  /** Per-instance file suffix — isolates accounts when running per-user bots */
+  private get instanceSuffix(): string {
+    const id = this.config.instanceId as string | undefined;
+    return id ? `-${id}` : "";
+  }
+
   private accountFile(): string {
-    return join(getAccountsDir(), "weixin.json");
+    return join(getAccountsDir(), `weixin${this.instanceSuffix}.json`);
   }
 
   private syncFile(): string {
-    return join(getAccountsDir(), "weixin-sync.json");
+    return join(getAccountsDir(), `weixin${this.instanceSuffix}-sync.json`);
   }
 
   private async saveAccount(): Promise<void> {
@@ -785,7 +791,7 @@ export class WeixinChannel implements Channel {
   // ── Startup greeting ──
 
   private guideSentFile(): string {
-    return join(getAccountsDir(), "weixin-guide-sent.json");
+    return join(getAccountsDir(), `weixin${this.instanceSuffix}-guide-sent.json`);
   }
 
   private async loadGuideSent(): Promise<Set<string>> {
@@ -887,7 +893,7 @@ export class WeixinChannel implements Channel {
   // ── Last token persistence ──
 
   private lastTokensFile(): string {
-    return join(getAccountsDir(), "weixin-tokens.json");
+    return join(getAccountsDir(), `weixin${this.instanceSuffix}-tokens.json`);
   }
 
   private async saveLastTokens(): Promise<void> {
