@@ -3,6 +3,7 @@ import { authMiddleware } from "../middleware/auth.js";
 import { getSessionManager } from "../../platform/session-manager.js";
 import type { PlatformRequest } from "../middleware/auth.js";
 import { createLogger } from "../../logger.js";
+import { auditConfigChange, auditProviderChange } from "../middleware/audit.js";
 
 const log = createLogger("config-routes");
 
@@ -58,6 +59,7 @@ router.put("/", (req: PlatformRequest, res: Response) => {
   const success = sessionManager.updateUserConfig(req.userId!, updates);
 
   if (success) {
+    auditConfigChange(req, "update_config", { fields: Object.keys(updates) });
     res.json({ success: true, message: "配置已更新" });
   } else {
     res.status(400).json({ error: "更新失败" });
@@ -96,6 +98,7 @@ router.post("/provider/:provider/key", (req: PlatformRequest, res: Response) => 
     config.defaultProvider = provider;
   }
 
+  auditProviderChange(req, provider, "set_key");
   log.info(`Provider ${provider} configured for user ${req.userId}`);
   sessionManager.updateUserConfig(req.userId!, config);
   res.json({ success: true });
@@ -111,6 +114,7 @@ router.post("/default-provider", (req: PlatformRequest, res: Response) => {
     return;
   }
 
+  auditProviderChange(req, provider, "set_default");
   sessionManager.updateUserConfig(req.userId!, { defaultProvider: provider });
   res.json({ success: true });
 });
