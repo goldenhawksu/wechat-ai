@@ -13,6 +13,7 @@ router.post("/register", validate(registerSchema), (req: PlatformRequest, res: R
   const inviteCode = req.body.inviteCode as string;
 
   if (!inviteCode) {
+    auditRegister(req, false, "missing_invite_code");
     res.status(400).json({ error: "请提供邀请码" });
     return;
   }
@@ -20,11 +21,13 @@ router.post("/register", validate(registerSchema), (req: PlatformRequest, res: R
   // Check invite code validity
   const invite = getInviteCode(inviteCode);
   if (!invite || !invite.isActive) {
+    auditRegister(req, false, "invalid_invite_code");
     res.status(400).json({ error: "无效的邀请码" });
     return;
   }
 
   if (invite.maxUses > 0 && invite.useCount >= invite.maxUses) {
+    auditRegister(req, false, "invite_code_exhausted");
     res.status(400).json({ error: "邀请码已用完" });
     return;
   }

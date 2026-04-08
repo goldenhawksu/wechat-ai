@@ -24,10 +24,11 @@ export function createWebServer(): Express {
   // CORS
   app.use((req, res, next) => {
     const origin = req.headers.origin as string | undefined;
-    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
-      res.header("Access-Control-Allow-Origin", origin || "*");
+    if (origin && ALLOWED_ORIGINS.includes(origin)) {
+      res.header("Access-Control-Allow-Origin", origin);
       res.header("Access-Control-Allow-Credentials", "true");
     }
+    // No origin header (same-origin / curl) or non-allowed origin: no CORS headers needed
     res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE");
     res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
     next();

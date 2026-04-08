@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   wechat_id TEXT UNIQUE,
   name TEXT,
-  invite_code TEXT NOT NULL,
+  invite_code TEXT NOT NULL UNIQUE,
   created_at INTEGER NOT NULL,
   last_active_at INTEGER NOT NULL,
   expires_at INTEGER NOT NULL,
@@ -75,6 +75,33 @@ export function getDatabase(): Database.Database {
 
     // Run embedded schema
     db.exec(SCHEMA);
+
+    // Migrations: add UNIQUE constraint on invite_code if missing
+    try {
+      const tableInfo = db.pragma("table_info(users)") as Array<{ name: string; pk: number; notnull: number; dflt_value: unknown; type: string }>;
+      const inviteCol = tableInfo.find(c => c.name === "invite_code");
+      if (inviteCol && !db.prepare("SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name='users' AND sql LIKE '%invite_code%'").get()) {
+        // Recreate table with UNIQUE constraint using safe migration
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS users_new (
+            id TEXT PRIMARY KEY,
+            wechat_id TEXT UNIQUE,
+            name TEXT,
+            invite_code TEXT NOT NULL UNIQUE,
+            created_at INTEGER NOT NULL,
+            last_active_at INTEGER NOT NULL,
+            expires_at INTEGER NOT NULL,
+            is_active INTEGER DEFAULT 1
+          );
+          INSERT OR IGNORE INTO users_new SELECT * FROM users;
+          DROP TABLE IF EXISTS users;
+          ALTER TABLE users_new RENAME TO users;
+        `);
+        log.info("Migrated users table: added UNIQUE constraint on invite_code");
+      }
+    } catch (err) {
+      log.warn(`Migration check for invite_code UNIQUE: ${err}`);
+    }
 
     log.info(`Database initialized at ${DB_PATH}`);
   }

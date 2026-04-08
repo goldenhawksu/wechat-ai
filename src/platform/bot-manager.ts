@@ -13,6 +13,7 @@ interface RunningBot {
   lastActivity: number;
   cleanupTimer: ReturnType<typeof setTimeout>;
   loginComplete: boolean; // true once login() finishes (QR scanned or account loaded)
+  qrImageCache?: string; // cached QR data URL to avoid regenerating on every poll
 }
 
 const MAX_BOTS = 10;
@@ -114,14 +115,15 @@ export class BotManager {
 
     const qr = bot.channel.pendingQR;
     if (qr) {
-      let qrImage: string | undefined;
-      if (qr.url && qr.status === "pending") {
+      let qrImage: string | undefined = bot.qrImageCache;
+      if (qr.url && qr.status === "pending" && !qrImage) {
         try {
           qrImage = await QRCode.toDataURL(qr.url, {
             width: 250,
             margin: 2,
             color: { dark: "#000000", light: "#ffffff" },
           });
+          bot.qrImageCache = qrImage;
         } catch (err) {
           log.warn(`Failed to generate QR image: ${err}`);
         }
@@ -130,7 +132,7 @@ export class BotManager {
         running: true,
         status: qr.status as "pending" | "scanned" | "expired",
         qrUrl: qr.url,
-        qrImage,
+        qrImage: qr.status === "pending" ? qrImage : undefined,
         message: qr.status === "pending"
           ? "等待扫码"
           : qr.status === "scanned"
@@ -155,9 +157,10 @@ export class BotManager {
     const bot = this.bots.get(userId);
     if (!bot) return;
 
+    // Delete from map FIRST to prevent double-stop from concurrent calls
+    this.bots.delete(userId);
     clearInterval(bot.cleanupTimer);
     await bot.channel.stop();
-    this.bots.delete(userId);
     log.info(`Stopped bot for user: ${userId.slice(0, 8)}...`);
   }
 
